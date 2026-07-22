@@ -1,0 +1,17 @@
+1. Filename: faculty.csv
+faculty_id, first_name,last_name,email
+
+2. Filename: students.csv 
+student_id,first_name,last_name,current_semester,admission_year,batch_group
+
+3. Filename: subjects.csv
+subject_code,subject_name,program,specialization,semester,lectures_per_week,type
+CS201,Data Structures,B. Pharm,General,3,4,Theory
+CS201-P,Data Structures Lab,M.Pharm, Pharmaceutics,3,4,Theory
+IT205,Computer Networks,M.Pharm,PQA,4,3,Theory
+
+4. Filename: faculty_allocations.csv
+faculty_id,subject_id,batch_group,allocation_type
+EMP001,SUB101,All,Theory
+EMP001,SUB102,B1,Practical
+EMP002,SUB102,B2,Practical

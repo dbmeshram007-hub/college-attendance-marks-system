@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+venv/
+.venv/
+*.pyc
+
+# Node & React
+node_modules/
+build/
+dist/
+.DS_Store
+
+# Sensitive Data / Excel backups (optional, keep local if private)
+*.xlsx

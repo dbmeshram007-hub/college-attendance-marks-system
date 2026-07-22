@@ -1,0 +1,28 @@
+to change directory: cd C:\DBM\attendance_Marks
+ python seed_db.py
+ to start server: uvicorn main:app --reload
+To start backend: cd college-frontend
+Start the React development server: npm start
+
+Windows PowerShell security restriction blocking .ps1 script files from running.
+
+You can fix this easily with a one-time command for your user profile. run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser in college-frontend hit enter is asks type-Y or if returns back to C:\DBM\attendance_Marks\college-frontend>
+try ,running your start command again: npm start
+
+
+Whenever admissions happen or a student transfers:
+Add their row to the Students sheet in College_System_Seed_Data.xlsx and save it.
+Open your terminal in the ATTENDANCE_MARKS folder.
+Run python sync_excel.py.
+For new Students:
+How to add the 2026 Students (Sem-1, D2D, Transfers)
+Because we built your app to be driven by Excel, updating student 
+data is incredibly easy and requires zero coding.
+Whenever new admissions come in, just follow these steps:
+Open your Excel File: Open College_System_Seed_Data.xlsx.
+Go to the Students sheet.
+Add the new students to the bottom of the list:
+B. Pharm Sem-1: Set Program to B. Pharm and Semester to 1.
+M. Pharm Sem-1 (Pharmaceutics): Set Program to M. Pharm, Specialization to Pharmaceutics, and Semester to 1.
+M. Pharm Sem-1 (PQA): Set Program to M. Pharm, Specialization to PQA, and Semester to 1.
+D2D / Transfer Students: Set their Program to B. Pharm, but set their Semester to 3 (since Diploma to Degree students start in the 2nd year).
