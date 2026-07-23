@@ -11,6 +11,12 @@ export default function CollegeDashboard() {
   const [loginInput, setLoginInput] = useState({ id: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
+  // Password Change Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passForm, setPassForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [passMessage, setPassMessage] = useState({ error: '', success: '' });
+  const [passLoading, setPassLoading] = useState(false);
+
   const [data, setData] = useState({
     students: [],
     faculty: [],
@@ -50,7 +56,6 @@ export default function CollegeDashboard() {
     }
     fetchData();
 
-    // Restore saved login session from localStorage if present
     const savedUser = localStorage.getItem('college_app_user');
     if (savedUser) {
       try {
@@ -75,7 +80,7 @@ export default function CollegeDashboard() {
         setLoginError('Invalid Admin credentials! (Use Username: admin / Password: admin123)');
       }
     } else {
-      // Faculty Login
+      // Faculty Login with custom password support
       const foundFaculty = data.faculty.find(
         f => f.faculty_id.toLowerCase() === loginInput.id.trim().toLowerCase() ||
              f.email.toLowerCase() === loginInput.id.trim().toLowerCase()
@@ -86,14 +91,15 @@ export default function CollegeDashboard() {
         return;
       }
 
-      // Default PIN check (1234 or matching faculty ID)
-      if (loginInput.password === '1234' || loginInput.password === foundFaculty.faculty_id) {
+      const validPin = foundFaculty.password || '1234';
+
+      if (loginInput.password === validPin || loginInput.password === '1234' || loginInput.password === foundFaculty.faculty_id) {
         const userObj = { role: 'faculty', name: foundFaculty.name, id: foundFaculty.faculty_id };
         setCurrentUser(userObj);
         localStorage.setItem('college_app_user', JSON.stringify(userObj));
         setActiveTab('attendance');
       } else {
-        setLoginError('Incorrect password. Default PIN is 1234');
+        setLoginError('Incorrect password. Default PIN is 1234.');
       }
     }
   };
@@ -102,6 +108,48 @@ export default function CollegeDashboard() {
     setCurrentUser(null);
     localStorage.removeItem('college_app_user');
     setLoginInput({ id: '', password: '' });
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPassMessage({ error: '', success: '' });
+
+    if (passForm.newPassword.length < 4) {
+      setPassMessage({ error: 'New password must be at least 4 characters long.', success: '' });
+      return;
+    }
+
+    if (passForm.newPassword !== passForm.confirmPassword) {
+      setPassMessage({ error: 'New passwords do not match.', success: '' });
+      return;
+    }
+
+    setPassLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/faculty/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          faculty_id: currentUser.id,
+          old_password: passForm.oldPassword,
+          new_password: passForm.newPassword
+        })
+      });
+
+      const resData = await res.json();
+
+      if (res.ok) {
+        setPassMessage({ error: '', success: '🎉 Password updated successfully!' });
+        setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        setTimeout(() => setShowPasswordModal(false), 2000);
+      } else {
+        setPassMessage({ error: resData.detail || 'Failed to update password.', success: '' });
+      }
+    } catch (err) {
+      setPassMessage({ error: 'Network error connecting to backend.', success: '' });
+    } finally {
+      setPassLoading(false);
+    }
   };
 
   const activeFacultyId = currentUser?.role === 'faculty' ? currentUser.id : '';
@@ -143,7 +191,6 @@ export default function CollegeDashboard() {
             <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>Select your portal mode to access your dashboard</p>
           </div>
 
-          {/* Login Mode Toggle */}
           <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', marginBottom: '1.5rem' }}>
             <button
               onClick={() => { setLoginMode('faculty'); setLoginError(''); }}
@@ -230,7 +277,7 @@ export default function CollegeDashboard() {
               />
               {loginMode === 'faculty' && (
                 <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Default password for faculty is <strong>1234</strong>
+                  Default PIN is <strong>1234</strong>
                 </span>
               )}
             </div>
@@ -259,14 +306,13 @@ export default function CollegeDashboard() {
     );
   }
 
-  // Faculty only sees practical entry tabs; Admin sees all database tables too
   const availableTabs = currentUser.role === 'faculty'
     ? ['attendance', 'marks', 'reports']
     : ['attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
 
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
-      {/* HEADER WITH LOGGED IN FACULTY INFO */}
+      {/* HEADER WITH FACULTY INFO & PASSWORD CHANGE BUTTON */}
       <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ color: '#0f172a', margin: '0 0 0.25rem 0' }}>College Management Dashboard</h1>
@@ -274,13 +320,32 @@ export default function CollegeDashboard() {
         </div>
         
         {/* LOGGED IN USER CARD */}
-        <div style={{ backgroundColor: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ backgroundColor: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>{currentUser.name}</div>
             <div style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', textTransform: 'capitalize' }}>
               {currentUser.role === 'faculty' ? `Faculty ID: ${currentUser.id}` : 'System Administrator'}
             </div>
           </div>
+
+          {currentUser.role === 'faculty' && (
+            <button
+              onClick={() => { setShowPasswordModal(true); setPassMessage({ error: '', success: '' }); }}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: 'white',
+                color: '#334155',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              🔑 Change PIN
+            </button>
+          )}
+
           <button
             onClick={handleLogout}
             style={{
@@ -298,6 +363,70 @@ export default function CollegeDashboard() {
           </button>
         </div>
       </div>
+
+      {/* PASSWORD CHANGE MODAL */}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: '12px', width: '100%', maxWidth: '380px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a' }}>Change Password / PIN</h3>
+
+            {passMessage.error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '1rem' }}>{passMessage.error}</div>}
+            {passMessage.success && <div style={{ background: '#f0fdf4', color: '#16a34a', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '1rem' }}>{passMessage.success}</div>}
+
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Current Password / PIN</label>
+                <input
+                  type="password"
+                  value={passForm.oldPassword}
+                  onChange={e => setPassForm({ ...passForm, oldPassword: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>New Password / PIN</label>
+                <input
+                  type="password"
+                  value={passForm.newPassword}
+                  onChange={e => setPassForm({ ...passForm, newPassword: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={passForm.confirmPassword}
+                  onChange={e => setPassForm({ ...passForm, confirmPassword: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passLoading}
+                  style={{ flex: 1, padding: '10px', background: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: 'white', cursor: passLoading ? 'wait' : 'pointer' }}
+                >
+                  {passLoading ? 'Saving...' : 'Save New PIN'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       
       {error && (
         <div style={{ color: '#dc2626', padding: '1rem', background: '#fef2f2', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #fee2e2' }}>
@@ -339,7 +468,6 @@ export default function CollegeDashboard() {
           {activeTab === 'subjects' && renderTable(['Code', 'Name', 'Program', 'Semester'], data.subjects, ['subject_code', 'subject_name', 'program', 'semester'])}
           {activeTab === 'allocations' && renderTable(['Faculty ID', 'Subject Code', 'Batch'], data.allocations, ['faculty_id', 'subject_id', 'batch_group'])}
           
-          {/* TEACHER MODULES - ISOLATED STRICTLY TO LOGGED IN FACULTY */}
           {activeTab === 'attendance' && (
             <AttendanceEntry 
               subjects={filteredSubjects} 

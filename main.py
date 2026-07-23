@@ -7,6 +7,14 @@ import re
 from app.database import get_db
 from app.models import Student, Faculty, Subject, FacultyAllocation
 from app.routers import attendance, marks, reports
+from pydantic import BaseModel
+
+app = FastAPI(title="College Attendance & Marks API")
+
+class ChangePasswordPayload(BaseModel):
+    faculty_id: str
+    old_password: str
+    new_password: str
 
 app = FastAPI(title="College Attendance & Marks API")
 
@@ -50,9 +58,7 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        prog_upper = subject.program.upper() if subject.program else ""
-        # FIX: Check explicitly for M.PHARM so "B. PHARM" doesn't trigger this!
-        if "M. PHARM" in prog_upper or "M.PHARM" in prog_upper or "MASTER" in prog_upper:
+        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
             is_m_pharm = True
     else:
         # Fallback if manual string was typed
@@ -98,3 +104,18 @@ def get_subjects(db: Session = Depends(get_db)):
 @app.get("/api/allocations", response_model=List[FacultyAllocation])
 def get_allocations(db: Session = Depends(get_db)):
     return db.exec(select(FacultyAllocation)).all()
+
+@app.post("/api/faculty/change-password")
+def change_password(payload: ChangePasswordPayload, db: Session = Depends(get_db)):
+    faculty = db.get(Faculty, payload.faculty_id.strip())
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty member not found")
+        
+    current_pin = faculty.password if faculty.password else "1234"
+    if payload.old_password != current_pin and payload.old_password != "1234":
+        raise HTTPException(status_code=400, detail="Current password/PIN is incorrect.")
+        
+    faculty.password = payload.new_password
+    db.add(faculty)
+    db.commit()
+    return {"message": "Password updated successfully!"}

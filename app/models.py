@@ -19,6 +19,7 @@ class Faculty(SQLModel, table=True):
     faculty_id: str = Field(primary_key=True)
     name: str
     email: str
+    password: Optional[str] = "1234"
 
 class Subject(SQLModel, table=True):
     subject_code: str = Field(primary_key=True)
