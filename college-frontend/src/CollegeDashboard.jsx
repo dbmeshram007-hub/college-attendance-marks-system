@@ -3,8 +3,7 @@ import MarksEntry from './MarksEntry';
 import Reports from './Reports';
 
 // Using window.location.hostname ensures this works on both localhost and LAN later!
-const API_BASE_URL = `http://${window.location.hostname}:8000/api`;
-
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 export default function CollegeDashboard() {
   const [activeTab, setActiveTab] = useState('attendance');
   const [activeFaculty, setActiveFaculty] = useState(''); // NEW: Track who is "logged in"
