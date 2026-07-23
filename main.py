@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from typing import List, Optional
@@ -114,6 +114,7 @@ def change_password(payload: ChangePasswordPayload, db: Session = Depends(get_db
     current_pin = faculty.password if faculty.password else "1234"
     if payload.old_password != current_pin and payload.old_password != "1234":
         raise HTTPException(status_code=400, detail="Current password/PIN is incorrect.")
+      
         
     faculty.password = payload.new_password
     db.add(faculty)
