@@ -9,27 +9,30 @@ from app.models import Student, Faculty, Subject, FacultyAllocation
 from app.routers import attendance, marks, reports
 from pydantic import BaseModel
 
+# 1. Create the App
 app = FastAPI(title="College Attendance & Marks API")
 
-class ChangePasswordPayload(BaseModel):
-    faculty_id: str
-    old_password: str
-    new_password: str
-
-app = FastAPI(title="College Attendance & Marks API")
-
+# 2. Fix CORS (Crucial for Vercel to talk to Render)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 3. Include our Routers
 app.include_router(attendance.router)
 app.include_router(marks.router)
 app.include_router(reports.router)
 
+# 4. Models
+class ChangePasswordPayload(BaseModel):
+    faculty_id: str
+    old_password: str
+    new_password: str
+
+# 5. Core Endpoints
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the College API! Go to /docs to test the endpoints."}
@@ -49,8 +52,6 @@ def get_students(
         return db.exec(base_stmt).all()
         
     search_code = subject_id.strip().upper()
-    
-    # 1. NEW: Fetch exact subject from DB to get its exact semester and program
     subject = db.get(Subject, search_code)
     
     target_semester = None
@@ -61,7 +62,6 @@ def get_students(
         if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
             is_m_pharm = True
     else:
-        # Fallback if manual string was typed
         match = re.search(r'[A-Z]+(\d)\d{2}', search_code)
         if match:
             target_semester = int(match.group(1))
@@ -84,7 +84,6 @@ def get_students(
         
     students = db.exec(stmt).all()
     
-    # 3. ULTIMATE FALLBACK: If filters fail, just return all students in that semester
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
@@ -114,7 +113,6 @@ def change_password(payload: ChangePasswordPayload, db: Session = Depends(get_db
     current_pin = faculty.password if faculty.password else "1234"
     if payload.old_password != current_pin and payload.old_password != "1234":
         raise HTTPException(status_code=400, detail="Current password/PIN is incorrect.")
-      
         
     faculty.password = payload.new_password
     db.add(faculty)
