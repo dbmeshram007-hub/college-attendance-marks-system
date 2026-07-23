@@ -12,10 +12,14 @@ from pydantic import BaseModel
 # 1. Create the App
 app = FastAPI(title="College Attendance & Marks API")
 
-# 2. Fix CORS (Crucial for Vercel to talk to Render)
+# 2. Fix CORS (Explicitly allowing Vercel frontend and all origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[
+        "https://college-attendance-marks-system.vercel.app",
+        "http://localhost:3000",
+        "*"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,7 +91,7 @@ def get_students(
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
-            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(batch.strip()))
+            fallback_stmt = fallback_stmt.where(Batch_group.contains(batch.strip()))
         students = db.exec(fallback_stmt).all()
         
     return students
