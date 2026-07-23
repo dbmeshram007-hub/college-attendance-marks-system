@@ -1,3 +1,6 @@
+Project id: rtjeaobxcwgjzeupzcni
+https://rtjeaobxcwgjzeupzcni.supabase.co: Link
+Suprabase.com: Ayyappa%*563
 to change directory: cd C:\DBM\attendance_Marks
  python seed_db.py
  to start server: uvicorn main:app --reload

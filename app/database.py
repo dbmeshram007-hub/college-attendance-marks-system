@@ -1,7 +1,7 @@
 from sqlmodel import create_engine, Session
 
 # Make sure this has your correct password and port 5433
-DATABASE_URL = "postgresql://postgres:password@localhost:5433/college_db"
+DATABASE_URL="postgresql://postgres.rtjeaobxcwgjzeupzcni:Ayyappa%*563@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
 
 engine = create_engine(DATABASE_URL, echo=True)
 def get_db():

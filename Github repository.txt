@@ -1,0 +1,67 @@
+Step-by-Step GitHub Setup Guide
+
+Follow these exact steps in your VS Code terminal to back up your code to GitHub securely.
+
+Step 1: Open your terminal in the project root
+
+Make sure your terminal is opened at the main ATTENDANCE_MARKS folder (where main.py and College_System_Seed_Data.xlsx live).
+
+Step 2: Create a .gitignore file
+
+We want to make sure we don't upload heavy local folders like node_modules or Python virtual environments (venv) to GitHub. Create a file named .gitignore in your root folder and add these lines:
+
+# Python
+__pycache__/
+venv/
+.venv/
+*.pyc
+
+# Node & React
+node_modules/
+build/
+dist/
+.DS_Store
+
+# Sensitive Data / Excel backups (optional, keep local if private)
+*.xlsx
+
+
+(Note: You can choose to include your College_System_Seed_Data.xlsx or keep it local and manage it via Google Sheets later. For now, keeping it gitignored or tracked is up to you—if you want to track it so your repository has seed data, omit it from .gitignore).
+
+Step 3: Initialize Git and Commit
+
+Run these commands one by one in your VS Code terminal:
+
+git init
+git add .
+git commit -m "Initial commit: Production ready college management system"
+
+
+Step 4: Create a Repository on GitHub
+
+Go to GitHub.com and log into your account.
+
+Click the "+" icon in the top right corner and select New repository.
+
+Name your repository (e.g., college-attendance-marks-system).
+
+Choose Public or Private (Private keeps your college student names and data secure).
+
+Do NOT check "Add a README file" (since you already have local files).
+
+Click Create repository.
+
+Step 5: Link your local project to GitHub and push
+
+Copy the commands shown on your GitHub page under "Erase or push an existing repository from the command line", which will look like this (replace with your actual username and repo name):
+
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/your-repo-name.git
+git push -u origin main
+
+
+Once this push completes successfully, your code is safely stored in the cloud! Whenever you make future code updates, you just run:
+
+git add .
+git commit -m "Updated feature"
+git push
