@@ -1,5 +1,7 @@
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
+your primary URL https://college-backend-007.onrender.com
 Project id: rtjeaobxcwgjzeupzcni
-https://rtjeaobxcwgjzeupzcni.supabase.co: Link
+https://rtjeaobxcwgjzeupzcni.supabase.co: Link: https://rtjeaobxcwgjzeupzcni.supabase.co
 Suprabase.com: Ayyappa%*563
 to change directory: cd C:\DBM\attendance_Marks
  python seed_db.py

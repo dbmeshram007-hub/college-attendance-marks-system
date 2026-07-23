@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MarksEntry from './MarksEntry'; // Make sure MarksEntry.jsx is in the same folder!
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('attendance'); // Defaulting to Attendance for your demo

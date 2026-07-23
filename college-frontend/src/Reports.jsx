@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 
 export default function Reports({ subjects = [] }) {
   const [activeReport, setActiveReport] = useState('attendance');
