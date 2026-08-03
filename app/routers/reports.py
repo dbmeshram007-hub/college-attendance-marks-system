@@ -6,55 +6,75 @@ from app.models import Student, Attendance, Subject, InternalExam, ExamMark
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
-# ... existing code ...
+
 @router.get("/attendance/{subject_id}")
 def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     subject = db.get(Subject, subject_id.strip().upper())
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
-    # 1. Get attendance records for this subject
+    # 1. Fetch records and calculate Total Unique Classes
     records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
-    
-    # 2. GROUP BY Date AND Lecture Sequence
     sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
     total_classes = len(sessions)
     
     if total_classes == 0:
         return {"subject": subject.subject_name, "total_classes": 0, "students": []}
         
-    student_stats = {}
+    # 2. Count UNIQUE sessions attended by each student
+    student_attended_sessions = {}
     for r in records:
+        key = r.student_id
+        if key not in student_attended_sessions:
+            student_attended_sessions[key] = set()
         if r.status and r.status.lower() == "present":
-            student_stats[r.student_id] = student_stats.get(r.student_id, 0) + 1
-            
-    # 3. FILTER STUDENTS: Only fetch students matching the Subject Program & Semester
-    # This prevents M. Pharm students from appearing in B. Pharm reports
-    # We use .ilike to catch both 'B. Pharm' and 'B.Pharm'
-    program_part = subject.program.split()[0] # Gets 'B.' or 'M.'
-    students = db.exec(
-        select(Student).where(
-            Student.semester == subject.semester,
-            Student.program.ilike(f"%{program_part}%")
-        )
-    ).all()
+            seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+            student_attended_sessions[key].add((r.date, seq))
+
+    # 3. BULLETPROOF STUDENT FETCHING (Copied directly from main.py)
+    target_semester = subject.semester
+    is_m_pharm = False
     
+    if subject.program:
+        prog_upper = subject.program.upper().replace(" ", "")
+        if "M.PHARM" in prog_upper:
+            is_m_pharm = True
+            
+    stmt = select(Student)
+    if target_semester:
+        stmt = stmt.where(Student.semester == target_semester)
+        
+    if is_m_pharm:
+        stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
+    else:
+        stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
+        
+    students = db.exec(stmt).all()
+    
+    # Fallback just in case of formatting mismatch
+    if not students and target_semester:
+        fallback_stmt = select(Student).where(Student.semester == target_semester)
+        students = db.exec(fallback_stmt).all()
+
+    # 4. Generate the final report
     result = []
     for s in students:
-        attended = student_stats.get(s.student_id, 0)
+        attended = len(student_attended_sessions.get(s.student_id, set()))
         perc = (attended / total_classes) * 100 if total_classes > 0 else 0
+        
         result.append({
             "student_id": s.student_id,
             "name": s.full_name,
             "attended": attended,
             "percentage": round(min(perc, 100), 2)
         })
-    
+        
     return {
         "subject": subject.subject_name, 
         "total_classes": total_classes, 
         "students": sorted(result, key=lambda x: x['name'])
     }
+
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
     prog_filter = f"%{program.replace(' ', '%')}%" 
