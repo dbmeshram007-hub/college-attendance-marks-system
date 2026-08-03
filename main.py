@@ -36,6 +36,9 @@ class ChangePasswordPayload(BaseModel):
     old_password: str
     new_password: str
 
+class AdminResetPasswordPayload(BaseModel):
+    faculty_id: str
+
 # 5. Core Endpoints
 @app.get("/")
 def read_root():
@@ -122,3 +125,14 @@ def change_password(payload: ChangePasswordPayload, db: Session = Depends(get_db
     db.add(faculty)
     db.commit()
     return {"message": "Password updated successfully!"}
+
+@app.post("/api/admin/reset-faculty-password")
+def admin_reset_password(payload: AdminResetPasswordPayload, db: Session = Depends(get_db)):
+    faculty = db.get(Faculty, payload.faculty_id.strip())
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty member not found")
+        
+    faculty.password = "1234"
+    db.add(faculty)
+    db.commit()
+    return {"message": f"Password for {faculty.name} has been reset to default (1234)."}

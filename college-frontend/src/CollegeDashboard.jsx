@@ -310,6 +310,72 @@ export default function CollegeDashboard() {
     ? ['attendance', 'marks', 'reports']
     : ['attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
 
+  const handleAdminResetPin = async (facultyId, facultyName) => {
+    if (!window.confirm(`Are you sure you want to reset password for ${facultyName} (${facultyId}) back to 1234?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reset-faculty-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faculty_id: facultyId })
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        alert(`🎉 Success: ${resData.message}`);
+      } else {
+        alert(resData.detail || 'Failed to reset password.');
+      }
+    } catch (e) {
+      alert('Network error connecting to backend.');
+    }
+  };
+
+  const renderFacultyTable = () => (
+    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+        <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+          <tr>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>ID</th>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Name</th>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Email</th>
+            {currentUser.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Admin Action</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {data.faculty.length === 0 ? (
+            <tr><td colSpan={currentUser.role === 'admin' ? 4 : 3} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No faculty available</td></tr>
+          ) : (
+            data.faculty.map((f, idx) => (
+              <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.faculty_id}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{f.name}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.email}</td>
+                {currentUser.role === 'admin' && (
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fca5a5',
+                        color: '#dc2626',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔑 Reset PIN to 1234
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
       {/* HEADER WITH FACULTY INFO & PASSWORD CHANGE BUTTON */}
@@ -464,7 +530,7 @@ export default function CollegeDashboard() {
       ) : (
         <div style={{ animation: 'fadeIn 0.3s' }}>
           {activeTab === 'students' && renderTable(['ID', 'Name', 'Program', 'Semester', 'Batch'], data.students, ['student_id', 'full_name', 'program', 'semester', 'batch_group'])}
-          {activeTab === 'faculty' && renderTable(['ID', 'Name', 'Email'], data.faculty, ['faculty_id', 'name', 'email'])}
+          {activeTab === 'faculty' && renderFacultyTable()}
           {activeTab === 'subjects' && renderTable(['Code', 'Name', 'Program', 'Semester'], data.subjects, ['subject_code', 'subject_name', 'program', 'semester'])}
           {activeTab === 'allocations' && renderTable(['Faculty ID', 'Subject Code', 'Batch'], data.allocations, ['faculty_id', 'subject_id', 'batch_group'])}
           
