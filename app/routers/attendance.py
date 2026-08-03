@@ -5,7 +5,7 @@ from datetime import date
 from sqlmodel import Session, select
 from app.database import get_db
 from app.models import Attendance, Subject
-
+import re
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
 class AttendanceRecord(BaseModel):
@@ -22,38 +22,43 @@ class SubmitAttendancePayload(BaseModel):
 def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(get_db)):
     search_code = payload.subject_id.strip().upper()
     subject = db.get(Subject, search_code)
-    for rec in payload.records:
-        entry = Attendance(
-            student_id=rec.student_id,
-            subject_id=search_code,
-            date=payload.date,
-            lecture_sequence=payload.lecture_sequence, # Save the sequence
-            status=rec.status
-        )
-        db.add(entry)
-    db.commit()
     
-    # SMART FALLBACK: If user types "BP303TP" but DB has "BP303T"
     if not subject:
-        import re
-        base_match = re.match(r'([A-Z]+\d{3})', search_code)
-        if base_match:
-            base_code = base_match.group(1)
-            subject = db.exec(select(Subject).where(Subject.subject_code.startswith(base_code))).first()
+        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
             if subject:
                 search_code = subject.subject_code
 
     if not subject:
-        raise HTTPException(status_code=404, detail=f"Subject '{payload.subject_id}' not found in database. Cannot save.")
+        raise HTTPException(status_code=404, detail=f"Subject '{payload.subject_id}' not found.")
 
-    # Iterate through the records to save each student's attendance
     for rec in payload.records:
-        entry = Attendance(
-            student_id=rec.student_id,
-            subject_id=search_code, # Use the corrected DB code
-            date=payload.date,
-            status=rec.status
+        # 1. CHECK IF RECORD ALREADY EXISTS
+        stmt = select(Attendance).where(
+            Attendance.student_id == rec.student_id,
+            Attendance.subject_id == search_code,
+            Attendance.date == payload.date,
+            Attendance.lecture_sequence == payload.lecture_sequence
         )
-        db.add(entry)
+        existing = db.exec(stmt).first()
+
+        if existing:
+            # UPDATE existing record (Prevents 200% duplication)
+            existing.status = rec.status
+        else:
+            # ADD new record
+            entry = Attendance(
+                student_id=rec.student_id,
+                subject_id=search_code,
+                date=payload.date,
+                lecture_sequence=payload.lecture_sequence,
+                status=rec.status
+            )
+            db.add(entry)
+            
     db.commit()
     return {"message": "Attendance saved successfully"}

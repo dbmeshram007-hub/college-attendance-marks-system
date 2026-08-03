@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from typing import List
 from app.database import get_db
 from app.models import Student, Attendance, Subject, InternalExam, ExamMark
-
+import re
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
 
@@ -13,15 +13,16 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
-    # 1. Fetch records and calculate Total Unique Classes
     records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
+    
+    # Calculate Total Unique Classes
     sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
     total_classes = len(sessions)
     
     if total_classes == 0:
         return {"subject": subject.subject_name, "total_classes": 0, "students": []}
         
-    # 2. Count UNIQUE sessions attended by each student
+    # Track unique sessions attended to automatically fix old duplicate database entries
     student_attended_sessions = {}
     for r in records:
         key = r.student_id
@@ -31,15 +32,18 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
             seq = r.lecture_sequence if r.lecture_sequence is not None else 1
             student_attended_sessions[key].add((r.date, seq))
 
-    # 3. BULLETPROOF STUDENT FETCHING (Copied directly from main.py)
+    # ROBUST STUDENT FETCHING (Matches main.py logic perfectly)
     target_semester = subject.semester
-    is_m_pharm = False
-    
-    if subject.program:
-        prog_upper = subject.program.upper().replace(" ", "")
-        if "M.PHARM" in prog_upper:
-            is_m_pharm = True
-            
+    prog_upper = subject.program.upper() if subject.program else ""
+    is_m_pharm = "M.PHARM" in prog_upper.replace(" ", "")
+
+    if not target_semester:
+        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code)
+        if match: target_semester = int(match.group(1))
+
+    if not prog_upper:
+        is_m_pharm = subject.subject_code.startswith("MP") or subject.subject_code.startswith("M.")
+
     stmt = select(Student)
     if target_semester:
         stmt = stmt.where(Student.semester == target_semester)
@@ -51,14 +55,9 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         
     students = db.exec(stmt).all()
     
-    # Fallback just in case of formatting mismatch
-    if not students and target_semester:
-        fallback_stmt = select(Student).where(Student.semester == target_semester)
-        students = db.exec(fallback_stmt).all()
-
-    # 4. Generate the final report
     result = []
     for s in students:
+        # Count the number of UNIQUE sessions they attended
         attended = len(student_attended_sessions.get(s.student_id, set()))
         perc = (attended / total_classes) * 100 if total_classes > 0 else 0
         
@@ -74,7 +73,6 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         "total_classes": total_classes, 
         "students": sorted(result, key=lambda x: x['name'])
     }
-
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
     prog_filter = f"%{program.replace(' ', '%')}%" 
