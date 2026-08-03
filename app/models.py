@@ -42,8 +42,9 @@ class Attendance(SQLModel, table=True):
     student_id: str = Field(foreign_key="student.student_id")
     subject_id: str = Field(foreign_key="subject.subject_code")
     date: date
+    lecture_sequence: int = 1 # <--- ADD THIS
     status: str
-
+    
 class InternalExam(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     subject_id: str = Field(foreign_key="subject.subject_code")

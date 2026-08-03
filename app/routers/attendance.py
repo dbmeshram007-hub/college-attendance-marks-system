@@ -15,12 +15,23 @@ class AttendanceRecord(BaseModel):
 class SubmitAttendancePayload(BaseModel):
     subject_id: str
     date: date
+    lecture_sequence: int = 1
     records: List[AttendanceRecord]
 
 @router.post("/submit")
 def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(get_db)):
     search_code = payload.subject_id.strip().upper()
     subject = db.get(Subject, search_code)
+    for rec in payload.records:
+        entry = Attendance(
+            student_id=rec.student_id,
+            subject_id=search_code,
+            date=payload.date,
+            lecture_sequence=payload.lecture_sequence, # Save the sequence
+            status=rec.status
+        )
+        db.add(entry)
+    db.commit()
     
     # SMART FALLBACK: If user types "BP303TP" but DB has "BP303T"
     if not subject:

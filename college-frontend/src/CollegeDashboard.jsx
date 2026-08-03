@@ -563,6 +563,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [subject, setSubject] = useState('');
+  const [lectureSeq, setLectureSeq] = useState(1);
   const [batch, setBatch] = useState('All');
   const [loading, setLoading] = useState(false);
 
@@ -607,6 +608,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     const payload = {
       subject_id: subject,
       date: new Date().toISOString().split('T')[0],
+      lecture_sequence: lectureSeq,
       records: Object.entries(attendance).map(([student_id, status]) => ({ student_id, status }))
     };
 
@@ -693,3 +695,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     </div>
   );
 }
+<select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))}>
+    <option value={1}>Lecture 1</option>
+    <option value={2}>Lecture 2</option>
+  </select>

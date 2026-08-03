@@ -12,37 +12,37 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
+    # 1. Get records and group by Date AND Sequence (we'll assume sequence 1 for now)
     records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
-    dates = set([r.date for r in records])
-    total_classes = len(dates)
+    
+    # GROUP BY Date AND Lecture Sequence
+    sessions = set([(r.date, r.lecture_sequence) for r in records])
+    total_classes = len(sessions)
     
     if total_classes == 0:
         return {"subject": subject.subject_name, "total_classes": 0, "students": []}
         
     student_stats = {}
     for r in records:
-        if r.student_id not in student_stats:
-            student_stats[r.student_id] = {"present": 0, "total": total_classes}
-        if r.status.lower() == "present":
-            student_stats[r.student_id]["present"] += 1
+        key = r.student_id
+        if key not in student_stats: student_stats[key] = 0
+        if r.status.lower() == "present": student_stats[key] += 1
             
-    student_ids = list(student_stats.keys())
-    students = db.exec(select(Student).where(Student.student_id.in_(student_ids))).all()
-    
     result = []
+    # Fetch all students in the class
+    students = db.exec(select(Student)).all() # Or filter by batch/sem as needed
+    
     for s in students:
-        stats = student_stats.get(s.student_id, {"present": 0, "total": total_classes})
-        perc = (stats["present"] / total_classes) * 100 if total_classes > 0 else 0
+        attended = student_stats.get(s.student_id, 0)
+        # Cap attendance at the number of classes actually held
+        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
         result.append({
             "student_id": s.student_id,
             "name": s.full_name,
-            "attended": stats["present"],
-            "total_classes": total_classes,
-            "percentage": round(perc, 2)
+            "attended": attended,
+            "percentage": round(min(perc, 100), 2) # Added min() to cap at 100%
         })
-        
-    result.sort(key=lambda x: x["student_id"]) # Sort by Enrollment Number
-    return {"subject": f"{subject.subject_code} - {subject.subject_name}", "total_classes": total_classes, "students": result}
+    return {"subject": subject.subject_name, "total_classes": total_classes, "students": result}
 
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):

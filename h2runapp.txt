@@ -1,3 +1,25 @@
+1. For changing subject allocation:
+Edit your Excel File: Open College_System_Seed_Data.xlsx and go to the Faculty_Allocation sheet.
+Make Changes: Add, delete, or change the faculty_id for the subjects you want to reallocate.
+Save: Save and close the Excel file.
+Run the Sync: Open your VS Code terminal and run:python sync_excel.py
+
+2. Adding New Students
+Edit your Excel File: Open College_System_Seed_Data.xlsx and go to the Students sheet.
+Add Rows: Add your new rows for the M. Pharm Sem-1 students at the bottom of the list.
+Check Data Consistency:
+Ensure the program column clearly says M. Pharm (to match the logic in your code).
+Ensure the semester column says 1.
+Ensure the batch_group is defined (e.g., M1, A, etc.).
+Save: Save and close the Excel file.
+Run the Sync: Open your VS Code terminal and run:python sync_excel.py
+
+
+when changes are done run following code:
+git add (main.py)    -File to be added 
+git commit -m ("Fixed missing Batch_group reference in main.py") ---reference to be added
+git push - final upload
+
 https://college-attendance-marks-system.vercel.app/
 const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 your primary URL https://college-backend-007.onrender.com
