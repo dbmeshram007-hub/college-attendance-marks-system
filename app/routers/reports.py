@@ -8,27 +8,47 @@ import re
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
 # ---------------------------------------------------------
-# 1. COMPILED ATTENDANCE REPORT (Must be first)
+# 1. COMPILED ATTENDANCE REPORT
 # ---------------------------------------------------------
 @router.get("/attendance/compiled")
 def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
     is_m_pharm = True if "M" in program.upper() and "PHARM" in program.upper() else False
     
-    sub_stmt = select(Subject).where(Subject.semester == semester)
-    if is_m_pharm: sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
-    else: sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
-    subjects = db.exec(sub_stmt).all()
-    
+    # BULLETPROOF SUBJECT FETCHING
+    all_subjects = db.exec(select(Subject)).all()
+    subjects = []
+    for sub in all_subjects:
+        code = sub.subject_code.upper()
+        sem = sub.semester
+        if not sem or sem == 0:
+            match = re.search(r'[A-Z]+(\d)\d{2}', code)
+            if match: sem = int(match.group(1))
+        
+        sub_is_m = False
+        if sub.program:
+            prog_upper = sub.program.upper().replace(" ", "")
+            if "M.PHARM" in prog_upper: sub_is_m = True
+        elif code.startswith("MP") or code.startswith("M."):
+            sub_is_m = True
+            
+        if sem == semester and sub_is_m == is_m_pharm:
+            subjects.append(sub)
+            
     if not subjects:
         return {"program": program, "semester": semester, "subjects": [], "students": []}
         
     subject_dicts = [{"code": s.subject_code, "name": s.subject_name} for s in subjects]
     sub_codes = [s.subject_code for s in subjects]
     
+    # BULLETPROOF STUDENT FETCHING
     stu_stmt = select(Student).where(Student.semester == semester)
     if is_m_pharm: stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
     else: stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
     students = db.exec(stu_stmt).all()
+    
+    if not students:
+        fallback_stmt = select(Student).where(Student.semester == semester)
+        students = db.exec(fallback_stmt).all()
     
     records = db.exec(select(Attendance).where(Attendance.subject_id.in_(sub_codes))).all()
     
@@ -82,21 +102,41 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
     is_m_pharm = True if "M" in program.upper() and "PHARM" in program.upper() else False
     
-    sub_stmt = select(Subject).where(Subject.semester == semester)
-    if is_m_pharm: sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
-    else: sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
-    subjects = db.exec(sub_stmt).all()
-    
+    # BULLETPROOF SUBJECT FETCHING
+    all_subjects = db.exec(select(Subject)).all()
+    subjects = []
+    for sub in all_subjects:
+        code = sub.subject_code.upper()
+        sem = sub.semester
+        if not sem or sem == 0:
+            match = re.search(r'[A-Z]+(\d)\d{2}', code)
+            if match: sem = int(match.group(1))
+        
+        sub_is_m = False
+        if sub.program:
+            prog_upper = sub.program.upper().replace(" ", "")
+            if "M.PHARM" in prog_upper: sub_is_m = True
+        elif code.startswith("MP") or code.startswith("M."):
+            sub_is_m = True
+            
+        if sem == semester and sub_is_m == is_m_pharm:
+            subjects.append(sub)
+            
     if not subjects:
         return {"program": program, "semester": semester, "examName": exam_name, "subjects": [], "students": []}
     
     subject_dicts = [{"code": s.subject_code, "name": s.subject_name} for s in subjects]
     sub_codes = [s.subject_code for s in subjects]
     
+    # BULLETPROOF STUDENT FETCHING
     stu_stmt = select(Student).where(Student.semester == semester)
     if is_m_pharm: stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
     else: stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
     students = db.exec(stu_stmt).all()
+    
+    if not students:
+        fallback_stmt = select(Student).where(Student.semester == semester)
+        students = db.exec(fallback_stmt).all()
     
     exams = db.exec(select(InternalExam).where(InternalExam.subject_id.in_(sub_codes), InternalExam.exam_name == exam_name)).all()
     exam_map = {e.subject_id: e.id for e in exams}
@@ -143,7 +183,6 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     search_code = subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
-    # Bulletproof fallback for weirdly formatted subject codes
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
@@ -179,6 +218,10 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         if "M.PHARM" in prog_upper:
             is_m_pharm = True
             
+    if not target_semester:
+        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code)
+        if match: target_semester = int(match.group(1))
+            
     stmt = select(Student)
     if target_semester:
         stmt = stmt.where(Student.semester == target_semester)
@@ -190,7 +233,6 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         
     students = db.exec(stmt).all()
     
-    # Fallback just in case of formatting mismatch
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         students = db.exec(fallback_stmt).all()
