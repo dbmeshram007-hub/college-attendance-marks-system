@@ -16,7 +16,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
     
     # GROUP BY Date AND Lecture Sequence
-    sessions = set([(r.date, r.lecture_sequence) for r in records])
+    sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
     total_classes = len(sessions)
     
     if total_classes == 0:
@@ -25,13 +25,17 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     student_stats = {}
     for r in records:
         key = r.student_id
+        # Initialize dictionary if key missing
         if key not in student_stats: student_stats[key] = 0
-        if r.status.lower() == "present": student_stats[key] += 1
+
+        # Count only if status is Present
+        if r.status and r.status.lower() == "present":
+            student_stats[key] += 1
             
-    result = []
-    # Fetch all students in the class
+    # Fetch all students to ensure we have names
     students = db.exec(select(Student)).all() # Or filter by batch/sem as needed
-    
+    result = []
+        
     for s in students:
         attended = student_stats.get(s.student_id, 0)
         # Cap attendance at the number of classes actually held
