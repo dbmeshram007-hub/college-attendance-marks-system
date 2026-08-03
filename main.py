@@ -66,19 +66,18 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
+        # FIX: Check for exact "M. PHARM" or "M.PHARM" (Ignoring case)
+        prog_upper = subject.program.upper().replace(" ", "")
+        if "M.PHARM" in prog_upper:
             is_m_pharm = True
-    else:
-        match = re.search(r'[A-Z]+(\d)\d{2}', search_code)
-        if match:
-            target_semester = int(match.group(1))
         else:
-            digits = re.findall(r'\d', search_code)
-            if digits:
-                target_semester = int(digits[0])
-                
-        if search_code.startswith("MP") or search_code.startswith("M."):
+            is_m_pharm = False
+    else:
+        # Fallback detection
+        if search_code.startswith("MP"):
             is_m_pharm = True
+        else:
+            is_m_pharm = False
 
     stmt = base_stmt
     if target_semester:
@@ -87,10 +86,11 @@ def get_students(
     if is_m_pharm:
         stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
     else:
+        # Ensure we filter for B. Pharm and NOT M. Pharm
         stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
         
     students = db.exec(stmt).all()
-    
+   
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
