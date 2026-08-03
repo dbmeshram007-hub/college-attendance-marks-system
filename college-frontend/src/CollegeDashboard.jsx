@@ -567,7 +567,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [loading, setLoading] = useState(false);
 
   // SMART BATCH LOGIC
-  let allowedBatches = ['All', 'A', 'B', 'C', 'D'];
+  let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E'];
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
     if (myAllocs.length > 0 && !myAllocs.some(a => a.batch_group.toLowerCase() === 'all')) {
