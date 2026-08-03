@@ -80,7 +80,7 @@ export default function CollegeDashboard() {
         setLoginError('Invalid Admin credentials! (Use Username: admin / Password: admin123)');
       }
     } else {
-      // Faculty Login with custom password support
+      // Faculty Login
       const foundFaculty = data.faculty.find(
         f => f.faculty_id.toLowerCase() === loginInput.id.trim().toLowerCase() ||
              f.email.toLowerCase() === loginInput.id.trim().toLowerCase()
@@ -171,9 +171,75 @@ export default function CollegeDashboard() {
           {rows.length === 0 ? (
             <tr><td colSpan={headers.length} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No data available</td></tr>
           ) : (
-            rows.map((row, idx) => (
+             rows.map((row, idx) => (
               <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 {keys.map(k => <td key={k} style={{ padding: '12px 16px', color: '#1e293b' }}>{row[k]}</td>)}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const handleAdminResetPin = async (facultyId, facultyName) => {
+    if (!window.confirm(`Are you sure you want to reset password for ${facultyName} (${facultyId}) back to 1234?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reset-faculty-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faculty_id: facultyId })
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        alert(`🎉 Success: ${resData.message}`);
+      } else {
+        alert(resData.detail || 'Failed to reset password.');
+      }
+    } catch (e) {
+      alert('Network error connecting to backend.');
+    }
+  };
+
+  const renderFacultyTable = () => (
+    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+        <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+          <tr>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>ID</th>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Name</th>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Email</th>
+            {currentUser.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Admin Action</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {data.faculty.length === 0 ? (
+            <tr><td colSpan={currentUser.role === 'admin' ? 4 : 3} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No faculty available</td></tr>
+          ) : (
+            data.faculty.map((f, idx) => (
+              <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.faculty_id}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{f.name}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.email}</td>
+                {currentUser.role === 'admin' && (
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fca5a5',
+                        color: '#dc2626',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔑 Reset PIN to 1234
+                    </button>
+                  </td>
+                )}
               </tr>
             ))
           )}
@@ -195,12 +261,7 @@ export default function CollegeDashboard() {
             <button
               onClick={() => { setLoginMode('faculty'); setLoginError(''); }}
               style={{
-                flex: 1,
-                padding: '8px',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
+                flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer',
                 backgroundColor: loginMode === 'faculty' ? 'white' : 'transparent',
                 color: loginMode === 'faculty' ? '#2563eb' : '#64748b',
                 boxShadow: loginMode === 'faculty' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
@@ -211,12 +272,7 @@ export default function CollegeDashboard() {
             <button
               onClick={() => { setLoginMode('admin'); setLoginError(''); }}
               style={{
-                flex: 1,
-                padding: '8px',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
+                flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer',
                 backgroundColor: loginMode === 'admin' ? 'white' : 'transparent',
                 color: loginMode === 'admin' ? '#2563eb' : '#64748b',
                 boxShadow: loginMode === 'admin' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
@@ -285,17 +341,8 @@ export default function CollegeDashboard() {
             <button
               type="submit"
               style={{
-                width: '100%',
-                padding: '12px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                fontSize: '15px',
-                cursor: 'pointer',
-                marginTop: '0.5rem',
-                transition: 'background 0.2s'
+                width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none',
+                borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', marginTop: '0.5rem', transition: 'background 0.2s'
               }}
             >
               Sign In to Dashboard
@@ -310,82 +357,16 @@ export default function CollegeDashboard() {
     ? ['attendance', 'marks', 'reports']
     : ['attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
 
-  const handleAdminResetPin = async (facultyId, facultyName) => {
-    if (!window.confirm(`Are you sure you want to reset password for ${facultyName} (${facultyId}) back to 1234?`)) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/reset-faculty-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faculty_id: facultyId })
-      });
-      const resData = await res.json();
-      if (res.ok) {
-        alert(`🎉 Success: ${resData.message}`);
-      } else {
-        alert(resData.detail || 'Failed to reset password.');
-      }
-    } catch (e) {
-      alert('Network error connecting to backend.');
-    }
-  };
-
-  const renderFacultyTable = () => (
-    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-        <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-          <tr>
-            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>ID</th>
-            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Name</th>
-            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Email</th>
-            {currentUser.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Admin Action</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {data.faculty.length === 0 ? (
-            <tr><td colSpan={currentUser.role === 'admin' ? 4 : 3} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No faculty available</td></tr>
-          ) : (
-            data.faculty.map((f, idx) => (
-              <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.faculty_id}</td>
-                <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{f.name}</td>
-                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.email}</td>
-                {currentUser.role === 'admin' && (
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#fef2f2',
-                        border: '1px solid #fca5a5',
-                        color: '#dc2626',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🔑 Reset PIN to 1234
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
-      {/* HEADER WITH FACULTY INFO & PASSWORD CHANGE BUTTON */}
+      
+      {/* HEADER */}
       <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ color: '#0f172a', margin: '0 0 0.25rem 0' }}>College Management Dashboard</h1>
           <p style={{ color: '#64748b', margin: 0 }}>Manage attendance, marks, and official reports from anywhere.</p>
         </div>
         
-        {/* LOGGED IN USER CARD */}
         <div style={{ backgroundColor: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>{currentUser.name}</div>
@@ -397,16 +378,7 @@ export default function CollegeDashboard() {
           {currentUser.role === 'faculty' && (
             <button
               onClick={() => { setShowPasswordModal(true); setPassMessage({ error: '', success: '' }); }}
-              style={{
-                padding: '6px 10px',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                backgroundColor: 'white',
-                color: '#334155',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#334155', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
             >
               🔑 Change PIN
             </button>
@@ -414,23 +386,14 @@ export default function CollegeDashboard() {
 
           <button
             onClick={handleLogout}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              border: '1px solid #fca5a5',
-              backgroundColor: '#fef2f2',
-              color: '#dc2626',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
+            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
           >
             Sign Out
           </button>
         </div>
       </div>
 
-      {/* PASSWORD CHANGE MODAL */}
+      {/* PASSWORD MODAL */}
       {showPasswordModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ background: 'white', borderRadius: '12px', width: '100%', maxWidth: '380px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
@@ -442,52 +405,19 @@ export default function CollegeDashboard() {
             <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Current Password / PIN</label>
-                <input
-                  type="password"
-                  value={passForm.oldPassword}
-                  onChange={e => setPassForm({ ...passForm, oldPassword: e.target.value })}
-                  required
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
-                />
+                <input type="password" value={passForm.oldPassword} onChange={e => setPassForm({ ...passForm, oldPassword: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>New Password / PIN</label>
-                <input
-                  type="password"
-                  value={passForm.newPassword}
-                  onChange={e => setPassForm({ ...passForm, newPassword: e.target.value })}
-                  required
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
-                />
+                <input type="password" value={passForm.newPassword} onChange={e => setPassForm({ ...passForm, newPassword: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Confirm New Password</label>
-                <input
-                  type="password"
-                  value={passForm.confirmPassword}
-                  onChange={e => setPassForm({ ...passForm, confirmPassword: e.target.value })}
-                  required
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
-                />
+                <input type="password" value={passForm.confirmPassword} onChange={e => setPassForm({ ...passForm, confirmPassword: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
               </div>
-
               <div style={{ display: 'flex', gap: '8px', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(false)}
-                  style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={passLoading}
-                  style={{ flex: 1, padding: '10px', background: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: 'white', cursor: passLoading ? 'wait' : 'pointer' }}
-                >
-                  {passLoading ? 'Saving...' : 'Save New PIN'}
-                </button>
+                <button type="button" onClick={() => setShowPasswordModal(false)} style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={passLoading} style={{ flex: 1, padding: '10px', background: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: 'white', cursor: passLoading ? 'wait' : 'pointer' }}>{passLoading ? 'Saving...' : 'Save New PIN'}</button>
               </div>
             </form>
           </div>
@@ -507,15 +437,10 @@ export default function CollegeDashboard() {
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              padding: '10px 20px',
-              cursor: 'pointer',
-              border: 'none',
+              padding: '10px 20px', cursor: 'pointer', border: 'none',
               backgroundColor: activeTab === tab ? '#2563eb' : '#f1f5f9',
               color: activeTab === tab ? 'white' : '#475569',
-              borderRadius: '8px',
-              fontWeight: '600',
-              textTransform: 'capitalize',
-              transition: 'all 0.2s'
+              borderRadius: '8px', fontWeight: '600', textTransform: 'capitalize', transition: 'all 0.2s'
             }}
           >
             {tab}
@@ -548,27 +473,33 @@ export default function CollegeDashboard() {
               allocations={data.allocations} 
             />
           )}
-          {activeTab === 'reports' && <Reports subjects={currentUser.role === 'faculty' ? filteredSubjects : data.subjects} />}
+          {activeTab === 'reports' && (
+            <Reports 
+              subjects={currentUser.role === 'faculty' ? filteredSubjects : data.subjects} 
+              currentUser={currentUser} 
+            />
+          )}
         </div>
       )}
       
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
+      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
     </div>
   );
 }
 
+// -----------------------------------------------------------------------------
+// NEW ATTENDANCE COMPONENT WITH LECTURE SEQUENCE DROPDOWN
+// -----------------------------------------------------------------------------
 function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [subject, setSubject] = useState('');
-  const [lectureSeq, setLectureSeq] = useState(1);
   const [batch, setBatch] = useState('All');
+  const [lectureSeq, setLectureSeq] = useState(1); // <-- THE NEW DROPDOWN STATE
   const [loading, setLoading] = useState(false);
 
-  // SMART BATCH LOGIC
-  let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E'];
+  // SMART BATCH LOGIC (Includes 'E' Batch)
+  let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E']; 
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
     if (myAllocs.length > 0 && !myAllocs.some(a => a.batch_group.toLowerCase() === 'all')) {
@@ -605,10 +536,12 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const handleSave = async () => {
     if (!subject) return alert("Select a subject first.");
     setLoading(true);
+    
+    // THE NEW PAYLOAD WITH LECTURE_SEQUENCE
     const payload = {
       subject_id: subject,
       date: new Date().toISOString().split('T')[0],
-      lecture_sequence: lectureSeq,
+      lecture_sequence: lectureSeq, 
       records: Object.entries(attendance).map(([student_id, status]) => ({ student_id, status }))
     };
 
@@ -630,6 +563,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   return (
     <div style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
       <h2 style={{ marginTop: 0, color: '#0f172a' }}>Daily Attendance Entry</h2>
+      
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
         
         <select 
@@ -645,10 +579,17 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
           ))}
         </select>
 
-        <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+        <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
           {allowedBatches.map(b => (
              <option key={b} value={b}>{b.toLowerCase() === 'all' ? 'All Batches' : `Batch ${b}`}</option>
           ))}
+        </select>
+
+        {/* THE VISIBLE LECTURE SEQUENCE DROPDOWN */}
+        <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
+          <option value={1}>Lecture 1</option>
+          <option value={2}>Lecture 2</option>
+          <option value={3}>Lecture 3</option>
         </select>
         
         <button onClick={fetchStudents} disabled={loading || !subject} style={{ padding: '10px 20px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '6px', cursor: (loading || !subject) ? 'not-allowed' : 'pointer', fontWeight: 'bold', opacity: (!subject) ? 0.7 : 1 }}>
@@ -695,7 +636,3 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     </div>
   );
 }
-<select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))}>
-    <option value={1}>Lecture 1</option>
-    <option value={2}>Lecture 2</option>
-  </select>
