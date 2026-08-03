@@ -94,7 +94,7 @@ def get_students(
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
-            fallback_stmt = fallback_stmt.where(Batch_group.contains(batch.strip()))
+            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(batch.strip()))
         students = db.exec(fallback_stmt).all()
         
     return students
