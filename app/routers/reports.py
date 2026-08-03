@@ -7,72 +7,84 @@ import re
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
 
-@router.get("/attendance/{subject_id}")
-def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
-    subject = db.get(Subject, subject_id.strip().upper())
-    if not subject:
-        raise HTTPException(status_code=404, detail="Subject not found")
+@router.get("/attendance/compiled")
+def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
     
-    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
+    # 1. BULLETPROOF PROGRAM FILTERING LOGIC
+    is_m_pharm = True if "M" in program.upper() and "PHARM" in program.upper() else False
     
-    # Calculate Total Unique Classes
-    sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
-    total_classes = len(sessions)
-    
-    if total_classes == 0:
-        return {"subject": subject.subject_name, "total_classes": 0, "students": []}
-        
-    # Track unique sessions attended to automatically fix old duplicate database entries
-    student_attended_sessions = {}
-    for r in records:
-        key = r.student_id
-        if key not in student_attended_sessions:
-            student_attended_sessions[key] = set()
-        if r.status and r.status.lower() == "present":
-            seq = r.lecture_sequence if r.lecture_sequence is not None else 1
-            student_attended_sessions[key].add((r.date, seq))
-
-    # ROBUST STUDENT FETCHING (Matches main.py logic perfectly)
-    target_semester = subject.semester
-    prog_upper = subject.program.upper() if subject.program else ""
-    is_m_pharm = "M.PHARM" in prog_upper.replace(" ", "")
-
-    if not target_semester:
-        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code)
-        if match: target_semester = int(match.group(1))
-
-    if not prog_upper:
-        is_m_pharm = subject.subject_code.startswith("MP") or subject.subject_code.startswith("M.")
-
-    stmt = select(Student)
-    if target_semester:
-        stmt = stmt.where(Student.semester == target_semester)
-        
+    # Fetch Subjects
+    sub_stmt = select(Subject).where(Subject.semester == semester)
     if is_m_pharm:
-        stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
+        sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
     else:
-        stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
-        
-    students = db.exec(stmt).all()
+        sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
+    subjects = db.exec(sub_stmt).all()
     
-    result = []
+    if not subjects:
+        return {"subjects": [], "students": []}
+        
+    subject_dicts = [{"code": s.subject_code, "name": s.subject_name} for s in subjects]
+    sub_codes = [s.subject_code for s in subjects]
+    
+    # Fetch Students using the same strict logic
+    stu_stmt = select(Student).where(Student.semester == semester)
+    if is_m_pharm:
+        stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
+    else:
+        stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
+    students = db.exec(stu_stmt).all()
+    
+    # 3. Fetch Attendance Records for these subjects
+    records = db.exec(select(Attendance).where(Attendance.subject_id.in_(sub_codes))).all()
+    
+    # 4. Calculate total unique classes PER SUBJECT
+    sub_sessions = {}
+    for r in records:
+        if r.subject_id not in sub_sessions:
+            sub_sessions[r.subject_id] = set()
+        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+        sub_sessions[r.subject_id].add((r.date, seq))
+        
+    subject_total_classes = {sub: len(sessions) for sub, sessions in sub_sessions.items()}
+    
+    # 5. Calculate student attended classes PER SUBJECT
+    student_attended = {}
+    for r in records:
+        if r.status and r.status.lower() == 'present':
+            sid = r.student_id
+            sub = r.subject_id
+            if sid not in student_attended: student_attended[sid] = {}
+            if sub not in student_attended[sid]: student_attended[sid][sub] = set()
+            seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+            student_attended[sid][sub].add((r.date, seq))
+            
+    # 6. Format the output grid
+    result_list = []
     for s in students:
-        # Count the number of UNIQUE sessions they attended
-        attended = len(student_attended_sessions.get(s.student_id, set()))
-        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
+        student_record = {"student_id": s.student_id, "name": s.full_name, "attendance": {}, "overall_percentage": 0}
+        total_possible = 0
+        total_attended = 0
         
-        result.append({
-            "student_id": s.student_id,
-            "name": s.full_name,
-            "attended": attended,
-            "percentage": round(min(perc, 100), 2)
-        })
+        for sub in subjects:
+            sub_code = sub.subject_code
+            possible = subject_total_classes.get(sub_code, 0)
+            attended_set = student_attended.get(s.student_id, {}).get(sub_code, set())
+            attended = len(attended_set)
+            
+            total_possible += possible
+            total_attended += attended
+            
+            perc = (attended / possible * 100) if possible > 0 else "-"
+            student_record["attendance"][sub_code] = round(perc, 2) if possible > 0 else "-"
+            
+        student_record["overall_percentage"] = round((total_attended / total_possible * 100), 2) if total_possible > 0 else 0
+        result_list.append(student_record)
         
-    return {
-        "subject": subject.subject_name, 
-        "total_classes": total_classes, 
-        "students": sorted(result, key=lambda x: x['name'])
-    }
+    result_list.sort(key=lambda x: x["student_id"]) # Sort by Enrollment
+    
+    return {"program": program, "semester": semester, "subjects": subject_dicts, "students": result_list}
+
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
     prog_filter = f"%{program.replace(' ', '%')}%" 
