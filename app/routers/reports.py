@@ -4,41 +4,34 @@ from typing import List
 from app.database import get_db
 from app.models import Student, Attendance, Subject, InternalExam, ExamMark
 import re
+
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
-
+# ---------------------------------------------------------
+# 1. COMPILED ATTENDANCE REPORT (Must be first)
+# ---------------------------------------------------------
 @router.get("/attendance/compiled")
 def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
-    
-    # 1. BULLETPROOF PROGRAM FILTERING LOGIC
     is_m_pharm = True if "M" in program.upper() and "PHARM" in program.upper() else False
     
-    # Fetch Subjects
     sub_stmt = select(Subject).where(Subject.semester == semester)
-    if is_m_pharm:
-        sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
-    else:
-        sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
+    if is_m_pharm: sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
+    else: sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
     subjects = db.exec(sub_stmt).all()
     
     if not subjects:
-        return {"subjects": [], "students": []}
+        return {"program": program, "semester": semester, "subjects": [], "students": []}
         
     subject_dicts = [{"code": s.subject_code, "name": s.subject_name} for s in subjects]
     sub_codes = [s.subject_code for s in subjects]
     
-    # Fetch Students using the same strict logic
     stu_stmt = select(Student).where(Student.semester == semester)
-    if is_m_pharm:
-        stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
-    else:
-        stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
+    if is_m_pharm: stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
+    else: stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
     students = db.exec(stu_stmt).all()
     
-    # 3. Fetch Attendance Records for these subjects
     records = db.exec(select(Attendance).where(Attendance.subject_id.in_(sub_codes))).all()
     
-    # 4. Calculate total unique classes PER SUBJECT
     sub_sessions = {}
     for r in records:
         if r.subject_id not in sub_sessions:
@@ -48,7 +41,6 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
         
     subject_total_classes = {sub: len(sessions) for sub, sessions in sub_sessions.items()}
     
-    # 5. Calculate student attended classes PER SUBJECT
     student_attended = {}
     for r in records:
         if r.status and r.status.lower() == 'present':
@@ -59,7 +51,6 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
             seq = r.lecture_sequence if r.lecture_sequence is not None else 1
             student_attended[sid][sub].add((r.date, seq))
             
-    # 6. Format the output grid
     result_list = []
     for s in students:
         student_record = {"student_id": s.student_id, "name": s.full_name, "attendance": {}, "overall_percentage": 0}
@@ -81,57 +72,143 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
         student_record["overall_percentage"] = round((total_attended / total_possible * 100), 2) if total_possible > 0 else 0
         result_list.append(student_record)
         
-    result_list.sort(key=lambda x: x["student_id"]) # Sort by Enrollment
-    
+    result_list.sort(key=lambda x: x["student_id"])
     return {"program": program, "semester": semester, "subjects": subject_dicts, "students": result_list}
 
+# ---------------------------------------------------------
+# 2. COMPILED MARKS REPORT
+# ---------------------------------------------------------
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
-    prog_filter = f"%{program.replace(' ', '%')}%" 
-    subjects = db.exec(select(Subject).where(Subject.semester == semester, Subject.program.ilike(prog_filter))).all()
+    is_m_pharm = True if "M" in program.upper() and "PHARM" in program.upper() else False
+    
+    sub_stmt = select(Subject).where(Subject.semester == semester)
+    if is_m_pharm: sub_stmt = sub_stmt.where(Subject.program.ilike("%M%Pharm%"))
+    else: sub_stmt = sub_stmt.where(Subject.program.ilike("%B%Pharm%"))
+    subjects = db.exec(sub_stmt).all()
     
     if not subjects:
-        return {"subjects": [], "students": []}
-        
-    subject_codes = [s.subject_code for s in subjects]
+        return {"program": program, "semester": semester, "examName": exam_name, "subjects": [], "students": []}
+    
     subject_dicts = [{"code": s.subject_code, "name": s.subject_name} for s in subjects]
+    sub_codes = [s.subject_code for s in subjects]
     
-    exams = db.exec(select(InternalExam).where(InternalExam.subject_id.in_(subject_codes), InternalExam.exam_name == exam_name)).all()
-    exam_ids = [e.id for e in exams]
-    exam_map = {e.id: e.subject_id for e in exams} 
+    stu_stmt = select(Student).where(Student.semester == semester)
+    if is_m_pharm: stu_stmt = stu_stmt.where(Student.program.ilike("%M%Pharm%"))
+    else: stu_stmt = stu_stmt.where(Student.program.ilike("%B%Pharm%"))
+    students = db.exec(stu_stmt).all()
     
-    if not exam_ids:
-         return {"subjects": subject_dicts, "students": []}
-         
-    marks = db.exec(select(ExamMark).where(ExamMark.exam_id.in_(exam_ids))).all()
-    students = db.exec(select(Student).where(Student.semester == semester, Student.program.ilike(prog_filter))).all()
+    exams = db.exec(select(InternalExam).where(InternalExam.subject_id.in_(sub_codes), InternalExam.exam_name == exam_name)).all()
+    exam_map = {e.subject_id: e.id for e in exams}
     
-    student_data = {}
+    marks = []
+    if exam_map:
+        marks = db.exec(select(ExamMark).where(ExamMark.exam_id.in_(exam_map.values()))).all()
+        
+    student_marks = {}
+    for m in marks:
+        if m.student_id not in student_marks: student_marks[m.student_id] = {}
+        student_marks[m.student_id][m.exam_id] = m
+        
+    result = []
     for s in students:
-        student_data[s.student_id] = {
+        s_record = {"student_id": s.student_id, "name": s.full_name, "marks": {}, "total": 0}
+        for sub in subjects:
+            exam_id = exam_map.get(sub.subject_code)
+            if not exam_id:
+                s_record["marks"][sub.subject_code] = "-"
+                continue
+            
+            m = student_marks.get(s.student_id, {}).get(exam_id)
+            if m:
+                if m.is_absent:
+                    s_record["marks"][sub.subject_code] = "ABS"
+                elif m.marks_obtained is not None:
+                    s_record["marks"][sub.subject_code] = m.marks_obtained
+                    s_record["total"] += m.marks_obtained
+                else:
+                    s_record["marks"][sub.subject_code] = "-"
+            else:
+                s_record["marks"][sub.subject_code] = "-"
+        result.append(s_record)
+        
+    result.sort(key=lambda x: x["total"], reverse=True)
+    return {"program": program, "semester": semester, "examName": exam_name, "subjects": subject_dicts, "students": result}
+
+# ---------------------------------------------------------
+# 3. SINGLE SUBJECT ATTENDANCE REPORT
+# ---------------------------------------------------------
+@router.get("/attendance/{subject_id}")
+def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
+    search_code = subject_id.strip().upper()
+    subject = db.get(Subject, search_code)
+    
+    # Bulletproof fallback for weirdly formatted subject codes
+    if not subject:
+        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
+            
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found in database")
+    
+    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
+    sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
+    total_classes = len(sessions)
+    
+    if total_classes == 0:
+        return {"subject": subject.subject_name, "total_classes": 0, "students": []}
+        
+    student_attended_sessions = {}
+    for r in records:
+        key = r.student_id
+        if key not in student_attended_sessions:
+            student_attended_sessions[key] = set()
+        if r.status and r.status.lower() == "present":
+            seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+            student_attended_sessions[key].add((r.date, seq))
+
+    target_semester = subject.semester
+    is_m_pharm = False
+    
+    if subject.program:
+        prog_upper = subject.program.upper().replace(" ", "")
+        if "M.PHARM" in prog_upper:
+            is_m_pharm = True
+            
+    stmt = select(Student)
+    if target_semester:
+        stmt = stmt.where(Student.semester == target_semester)
+        
+    if is_m_pharm:
+        stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
+    else:
+        stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
+        
+    students = db.exec(stmt).all()
+    
+    # Fallback just in case of formatting mismatch
+    if not students and target_semester:
+        fallback_stmt = select(Student).where(Student.semester == target_semester)
+        students = db.exec(fallback_stmt).all()
+
+    result = []
+    for s in students:
+        attended = len(student_attended_sessions.get(s.student_id, set()))
+        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
+        
+        result.append({
             "student_id": s.student_id,
             "name": s.full_name,
-            "marks": {code: "-" for code in subject_codes},
-            "total": 0
-        }
+            "attended": attended,
+            "percentage": round(min(perc, 100), 2)
+        })
         
-    for m in marks:
-        sub_code = exam_map[m.exam_id]
-        if m.student_id in student_data:
-            if m.is_absent:
-                student_data[m.student_id]["marks"][sub_code] = "ABS"
-            elif m.marks_obtained is not None:
-                student_data[m.student_id]["marks"][sub_code] = m.marks_obtained
-                student_data[m.student_id]["total"] += m.marks_obtained
-                
-    result_list = list(student_data.values())
-    # THIS SORTS STUDENTS BY HIGHEST TOTAL MARKS (RANKING!)
-    result_list.sort(key=lambda x: x["total"], reverse=True)
-    
     return {
-        "program": program,
-        "semester": semester,
-        "exam_name": exam_name,
-        "subjects": subject_dicts,
-        "students": result_list
+        "subject": subject.subject_name, 
+        "total_classes": total_classes, 
+        "students": sorted(result, key=lambda x: x['name'])
     }
