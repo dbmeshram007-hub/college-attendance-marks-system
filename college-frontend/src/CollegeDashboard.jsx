@@ -109,6 +109,7 @@ export default function CollegeDashboard() {
     setCurrentUser(null);
     localStorage.removeItem('college_app_user');
     setLoginInput({ id: '', password: '' });
+    window.location.reload(); // NEW: Force a page reload on logout to clear all sensitive memory and fetch fresh passwords
   };
 
   const handleChangePassword = async (e) => {
@@ -141,6 +142,15 @@ export default function CollegeDashboard() {
 
       if (res.ok) {
         setPassMessage({ error: '', success: '🎉 Password updated successfully!' });
+        
+        // NEW: Update frontend memory immediately
+        setData(prev => ({
+          ...prev,
+          faculty: prev.faculty.map(f => 
+            f.faculty_id === currentUser.id ? { ...f, password: passForm.newPassword } : f
+          )
+        }));
+
         setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setTimeout(() => setShowPasswordModal(false), 2000);
       } else {
@@ -164,6 +174,15 @@ export default function CollegeDashboard() {
       const resData = await res.json();
       if (res.ok) {
         alert(`🎉 Success: ${resData.message}`);
+        
+        // NEW: Update frontend memory immediately
+        setData(prev => ({
+          ...prev,
+          faculty: prev.faculty.map(f => 
+            f.faculty_id === facultyId ? { ...f, password: '1234' } : f
+          )
+        }));
+
       } else {
         alert(resData.detail || 'Failed to reset password.');
       }
