@@ -4,6 +4,7 @@ from typing import List
 from app.database import get_db
 from app.models import Student, Attendance, Subject, InternalExam, ExamMark
 import re
+from datetime import datetime # ADDED FOR DATE PARSING
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -12,7 +13,6 @@ router = APIRouter(prefix="/api/reports", tags=["Reports"])
 # ---------------------------------------------------------
 @router.get("/attendance/compiled")
 def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
-    # THE BUG FIX: Check if it STARTS with M, ignoring the M at the end of "B. Pharm"
     is_m_pharm = program.upper().strip().startswith("M")
     
     all_subjects = db.exec(select(Subject)).all()
@@ -187,10 +187,10 @@ def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session 
     return {"program": program, "semester": semester, "examName": exam_name, "subjects": subject_dicts, "students": result}
 
 # ---------------------------------------------------------
-# 3. SINGLE SUBJECT ATTENDANCE REPORT
+# 3. SINGLE SUBJECT ATTENDANCE REPORT (NOW SUPPORTS DATE)
 # ---------------------------------------------------------
 @router.get("/attendance/{subject_id}")
-def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
+def get_attendance_report(subject_id: str, date: str = None, db: Session = Depends(get_db)):
     search_code = subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
@@ -205,13 +205,19 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found in database")
     
-    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
+    # FILTER BY DATE IF PROVIDED
+    stmt = select(Attendance).where(Attendance.subject_id == subject.subject_code)
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+            stmt = stmt.where(Attendance.date == target_date)
+        except ValueError:
+            pass
+            
+    records = db.exec(stmt).all()
     sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
     total_classes = len(sessions)
     
-    if total_classes == 0:
-        return {"subject": subject.subject_name, "total_classes": 0, "students": []}
-        
     student_attended_sessions = {}
     for r in records:
         key = r.student_id
@@ -221,7 +227,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
             seq = r.lecture_sequence if r.lecture_sequence is not None else 1
             student_attended_sessions[key].add((r.date, seq))
 
-    # Safely extract target semester and program type
+    # SAFELY EXTRACT SEMESTER & PROGRAM
     target_semester = 0
     try: target_semester = int(subject.semester) if subject.semester else 0
     except: pass
@@ -254,15 +260,28 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         attended = len(student_attended_sessions.get(s.student_id, set()))
         perc = (attended / total_classes) * 100 if total_classes > 0 else 0
         
+        # Determine Daily Status Text if date is selected
+        status_text = "-"
+        if date and total_classes > 0:
+            if attended == total_classes:
+                status_text = "Present"
+            elif attended > 0:
+                status_text = f"Partial ({attended}/{total_classes})"
+            else:
+                status_text = "Absent"
+        
         result.append({
             "student_id": s.student_id,
             "name": s.full_name,
             "attended": attended,
-            "percentage": round(min(perc, 100), 2)
+            "percentage": round(min(perc, 100), 2),
+            "status_text": status_text # Pass status to frontend
         })
         
     return {
         "subject": subject.subject_name, 
         "total_classes": total_classes, 
+        "is_daily": bool(date),
+        "report_date": date,
         "students": sorted(result, key=lambda x: x['name'])
     }

@@ -44,6 +44,7 @@ export default function Reports({ subjects = [], currentUser }) {
 
 function AttendanceReport({ subjects }) {
   const [subject, setSubject] = useState('');
+  const [reportDate, setReportDate] = useState(''); // NEW DATE STATE
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +52,10 @@ function AttendanceReport({ subjects }) {
     if (!subject) return alert("Select a subject first.");
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/reports/attendance/${subject}`);
+      let url = `${API_BASE_URL}/reports/attendance/${subject}`;
+      if (reportDate) url += `?date=${reportDate}`; // ADD DATE TO API CALL
+      
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Report failed");
       setData(await res.json());
     } catch (e) { alert("Error generating report."); }
@@ -61,31 +65,48 @@ function AttendanceReport({ subjects }) {
   const downloadPDF = () => {
     if (!data) return;
     const doc = new jsPDF();
+    const currentDate = new Date().toLocaleDateString();
+    
     doc.setFontSize(16);
-    doc.text(`Attendance Report: ${data.subject}`, 14, 15);
-    doc.setFontSize(11);
-    doc.text(`Total Classes Conducted: ${data.total_classes}`, 14, 22);
-
-    const tableColumn = ["Enrollment No", "Student Name", "Classes Attended", "Percentage (%)"];
-    const tableRows = data.students.map(s => [s.student_id, s.name, s.attended, `${s.percentage}%`]);
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 28,
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [37, 99, 235] }
-    });
-    doc.save(`${data.subject}_Attendance.pdf`);
+    if (data.is_daily) {
+        doc.text(`Daily Attendance Report: ${data.subject}`, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Report Date: ${data.report_date}  |  Total Lectures: ${data.total_classes}  |  Generated: ${currentDate}`, 14, 22);
+        
+        const tableColumn = ["Enrollment No", "Student Name", "Daily Status"];
+        const tableRows = data.students.map(s => [s.student_id, s.name, s.status_text]);
+        autoTable(doc, { head: [tableColumn], body: tableRows, startY: 28, styles: { fontSize: 10 }, headStyles: { fillColor: [37, 99, 235] } });
+    } else {
+        doc.text(`Cumulative Attendance Report: ${data.subject}`, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Total Classes Conducted: ${data.total_classes}  |  Generated: ${currentDate}`, 14, 22);
+        
+        const tableColumn = ["Enrollment No", "Student Name", "Classes Attended", "Percentage (%)"];
+        const tableRows = data.students.map(s => [s.student_id, s.name, s.attended, `${s.percentage}%`]);
+        autoTable(doc, { head: [tableColumn], body: tableRows, startY: 28, styles: { fontSize: 10 }, headStyles: { fillColor: [37, 99, 235] } });
+    }
+    
+    const fileName = data.is_daily ? `${data.subject}_${data.report_date}.pdf` : `${data.subject}_Cumulative.pdf`;
+    doc.save(fileName);
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, maxWidth: '300px' }}>
           <option value="">-- Select Subject --</option>
           {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
         </select>
+        
+        {/* NEW DATE PICKER INPUT */}
+        <input 
+          type="date" 
+          value={reportDate} 
+          onChange={e => setReportDate(e.target.value)} 
+          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+          title="Leave blank for cumulative report, or pick a date for a daily report."
+        />
+
         <button onClick={generateReport} disabled={loading} style={{ padding: '10px 20px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
           {loading ? 'Generating...' : 'View Report'}
         </button>
@@ -93,30 +114,48 @@ function AttendanceReport({ subjects }) {
 
       {data && (
         <div style={{ animation: 'fadeIn 0.3s' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <p style={{ margin: 0, fontWeight: 'bold', color: '#475569' }}>Total Classes: {data.total_classes}</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+            <p style={{ margin: 0, fontWeight: 'bold', color: '#475569' }}>
+              {data.is_daily ? `Date: ${data.report_date} | Total Lectures: ${data.total_classes}` : `Total Classes: ${data.total_classes}`}
+            </p>
             <button onClick={downloadPDF} style={{ padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📄 Export to PDF</button>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-              <tr>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Enrollment</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
-                <th style={{ padding: '10px', textAlign: 'center' }}>Attended</th>
-                <th style={{ padding: '10px', textAlign: 'center' }}>Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.students.map(s => (
-                <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '10px', color: '#64748b' }}>{s.student_id}</td>
-                  <td style={{ padding: '10px', fontWeight: '500' }}>{s.name}</td>
-                  <td style={{ padding: '10px', textAlign: 'center' }}>{s.attended}</td>
-                  <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: s.percentage < 75 ? '#ef4444' : '#16a34a' }}>{s.percentage}%</td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                <tr>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Enrollment</th>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
+                  {data.is_daily ? (
+                      <th style={{ padding: '10px', textAlign: 'center' }}>Daily Status</th>
+                  ) : (
+                      <>
+                          <th style={{ padding: '10px', textAlign: 'center' }}>Attended</th>
+                          <th style={{ padding: '10px', textAlign: 'center' }}>Percentage</th>
+                      </>
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.students.map(s => (
+                  <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px', color: '#64748b' }}>{s.student_id}</td>
+                    <td style={{ padding: '10px', fontWeight: '500' }}>{s.name}</td>
+                    {data.is_daily ? (
+                        <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: s.status_text === 'Absent' ? '#ef4444' : s.status_text === '-' ? '#94a3b8' : '#16a34a' }}>
+                            {s.status_text}
+                        </td>
+                    ) : (
+                        <>
+                            <td style={{ padding: '10px', textAlign: 'center' }}>{s.attended}</td>
+                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: s.percentage < 75 ? '#ef4444' : '#16a34a' }}>{s.percentage}%</td>
+                        </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -143,8 +182,12 @@ function MarksReport() {
   const downloadPDF = () => {
     if (!data) return;
     const doc = new jsPDF('landscape');
+    const currentDate = new Date().toLocaleDateString();
+    
     doc.setFontSize(16);
     doc.text(`${data.program} - Semester ${data.semester} | ${data.examName} Compilation`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${currentDate}`, 14, 21);
     
     const tableColumn = ["Rank", "Enrollment No", "Student Name", ...data.subjects.map(s => s.code), "Total Marks"];
     const tableRows = data.students.map((s, idx) => [
@@ -155,13 +198,7 @@ function MarksReport() {
       s.total
     ]);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 22,
-      styles: { fontSize: 9, cellPadding: 2 },
-      headStyles: { fillColor: [15, 23, 42] }
-    });
+    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 25, styles: { fontSize: 9, cellPadding: 2 }, headStyles: { fillColor: [15, 23, 42] } });
     doc.save(`${data.program}_Sem${data.semester}_${data.examName}.pdf`);
   };
 
@@ -244,8 +281,12 @@ function CompiledAttendanceReport() {
   const downloadPDF = () => {
     if (!data) return;
     const doc = new jsPDF('landscape');
+    const currentDate = new Date().toLocaleDateString();
+    
     doc.setFontSize(16);
     doc.text(`${data.program} - Semester ${data.semester} | Cumulative Attendance`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${currentDate}`, 14, 21);
     
     const tableColumn = ["Enrollment No", "Student Name", ...data.subjects.map(s => s.code), "Overall %"];
     const tableRows = data.students.map((s) => [
@@ -255,13 +296,7 @@ function CompiledAttendanceReport() {
       `${s.overall_percentage}%`
     ]);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 22,
-      styles: { fontSize: 9, cellPadding: 2 },
-      headStyles: { fillColor: [15, 23, 42] } // Dark blue header
-    });
+    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 25, styles: { fontSize: 9, cellPadding: 2 }, headStyles: { fillColor: [15, 23, 42] } });
     doc.save(`${data.program}_Sem${data.semester}_Cumulative_Attendance.pdf`);
   };
 
