@@ -189,8 +189,10 @@ def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session 
 # ---------------------------------------------------------
 # 3. SINGLE SUBJECT ATTENDANCE REPORT (NOW SUPPORTS DATE)
 # ---------------------------------------------------------
+# 3. SINGLE SUBJECT ATTENDANCE REPORT
+# ---------------------------------------------------------
 @router.get("/attendance/{subject_id}")
-def get_attendance_report(subject_id: str, date: str = None, db: Session = Depends(get_db)):
+def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     search_code = subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
@@ -205,83 +207,91 @@ def get_attendance_report(subject_id: str, date: str = None, db: Session = Depen
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found in database")
     
-    # FILTER BY DATE IF PROVIDED
-    stmt = select(Attendance).where(Attendance.subject_id == subject.subject_code)
-    if date:
-        try:
-            target_date = datetime.strptime(date, "%Y-%m-%d").date()
-            stmt = stmt.where(Attendance.date == target_date)
-        except ValueError:
-            pass
-            
-    records = db.exec(stmt).all()
-    sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
-    total_classes = len(sessions)
+    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
     
-    student_attended_sessions = {}
+    # 1. Extract unique sessions and sort them chronologically
+    session_set = set()
+    for r in records:
+        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+        session_set.add((r.date, seq))
+        
+    sorted_sessions = sorted(list(session_set), key=lambda x: (x[0], x[1]))
+    
+    # 2. Create column headers (e.g., "04-Aug" or "04-Aug (L2)")
+    session_headers = []
+    for d, seq in sorted_sessions:
+        date_str = d.strftime("%d-%b")
+        session_headers.append(f"{date_str} (L{seq})" if seq > 1 else date_str)
+        
+    total_classes = len(sorted_sessions)
+    
+    if total_classes == 0:
+        return {"subject": subject.subject_name, "total_classes": 0, "sessions": [], "students": []}
+        
+    # 3. Map student attendance into a P/A grid format
+    student_attendance_map = {}
     for r in records:
         key = r.student_id
-        if key not in student_attended_sessions:
-            student_attended_sessions[key] = set()
-        if r.status and r.status.lower() == "present":
-            seq = r.lecture_sequence if r.lecture_sequence is not None else 1
-            student_attended_sessions[key].add((r.date, seq))
+        if key not in student_attendance_map:
+            student_attendance_map[key] = {}
+            
+        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+        is_present = r.status and r.status.lower() == "present"
+        student_attendance_map[key][(r.date, seq)] = "P" if is_present else "A"
 
-    # SAFELY EXTRACT SEMESTER & PROGRAM
-    target_semester = 0
-    try: target_semester = int(subject.semester) if subject.semester else 0
-    except: pass
-    
-    if target_semester == 0:
-        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code.upper())
-        if match: target_semester = int(match.group(1))
-
+    target_semester = subject.semester
     is_m_pharm = False
-    sub_prog = (subject.program or "").upper().replace(" ", "")
-    if sub_prog.startswith("M"): is_m_pharm = True
-    elif search_code.startswith("MP") or search_code.startswith("M."): is_m_pharm = True
+    
+    if subject.program:
+        prog_upper = subject.program.upper().replace(" ", "")
+        if "M.PHARM" in prog_upper:
+            is_m_pharm = True
             
-    all_students = db.exec(select(Student)).all()
-    students = []
-    for stu in all_students:
-        sem = 0
-        try: sem = int(stu.semester) if stu.semester else 0
-        except: pass
+    if not target_semester:
+        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code)
+        if match: target_semester = int(match.group(1))
+            
+    stmt = select(Student)
+    if target_semester:
+        stmt = stmt.where(Student.semester == target_semester)
         
-        stu_is_m = False
-        stu_prog = (stu.program or "").upper().replace(" ", "")
-        if stu_prog.startswith("M"): stu_is_m = True
-            
-        if sem == target_semester and stu_is_m == is_m_pharm:
-            students.append(stu)
+    if is_m_pharm:
+        stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
+    else:
+        stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
+        
+    students = db.exec(stmt).all()
+    
+    if not students and target_semester:
+        fallback_stmt = select(Student).where(Student.semester == target_semester)
+        students = db.exec(fallback_stmt).all()
 
+    # 4. Build the final response with the daily status array
     result = []
     for s in students:
-        attended = len(student_attended_sessions.get(s.student_id, set()))
-        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
+        s_map = student_attendance_map.get(s.student_id, {})
+        daily_status = []
+        attended = 0
         
-        # Determine Daily Status Text if date is selected
-        status_text = "-"
-        if date and total_classes > 0:
-            if attended == total_classes:
-                status_text = "Present"
-            elif attended > 0:
-                status_text = f"Partial ({attended}/{total_classes})"
-            else:
-                status_text = "Absent"
+        for sess in sorted_sessions:
+            status = s_map.get(sess, "-") # '-' means not marked for that day
+            if status == "P":
+                attended += 1
+            daily_status.append(status)
+            
+        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
         
         result.append({
             "student_id": s.student_id,
             "name": s.full_name,
+            "daily_status": daily_status,
             "attended": attended,
-            "percentage": round(min(perc, 100), 2),
-            "status_text": status_text # Pass status to frontend
+            "percentage": round(min(perc, 100), 2)
         })
         
     return {
         "subject": subject.subject_name, 
         "total_classes": total_classes, 
-        "is_daily": bool(date),
-        "report_date": date,
+        "sessions": session_headers,
         "students": sorted(result, key=lambda x: x['name'])
     }
