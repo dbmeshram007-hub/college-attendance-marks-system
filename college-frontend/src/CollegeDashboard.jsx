@@ -3,12 +3,12 @@ import Reports from './Reports';
 import MarksEntry from './MarksEntry';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 
-const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api'; // Make sure this matches your live backend!
 
 export default function CollegeDashboard() {
   const [activeTab, setActiveTab] = useState('overview'); // OVERVIEW IS NOW DEFAULT
   const [currentUser, setCurrentUser] = useState(null); // Null = Not logged in
-  const [loginMode, setLoginMode] = useState('faculty'); // 'faculty' or 'admin'
+  const [loginMode, setLoginMode] = useState('admin'); // 'faculty' or 'admin'
   const [loginInput, setLoginInput] = useState({ id: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
@@ -76,7 +76,7 @@ export default function CollegeDashboard() {
         const userObj = { role: 'admin', name: 'System Administrator', id: 'ADMIN' };
         setCurrentUser(userObj);
         localStorage.setItem('college_app_user', JSON.stringify(userObj));
-        setActiveTab('attendance');
+        setActiveTab('overview');
       } else {
         setLoginError('Invalid Admin credentials! (Use Username: admin / Password: admin123)');
       }
@@ -98,7 +98,7 @@ export default function CollegeDashboard() {
         const userObj = { role: 'faculty', name: foundFaculty.name, id: foundFaculty.faculty_id };
         setCurrentUser(userObj);
         localStorage.setItem('college_app_user', JSON.stringify(userObj));
-        setActiveTab('attendance');
+        setActiveTab('overview');
       } else {
         setLoginError('Incorrect password. Default PIN is 1234.');
       }
@@ -153,6 +153,25 @@ export default function CollegeDashboard() {
     }
   };
 
+  const handleAdminResetPin = async (facultyId, facultyName) => {
+    if (!window.confirm(`Are you sure you want to reset password for ${facultyName} (${facultyId}) back to 1234?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reset-faculty-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faculty_id: facultyId })
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        alert(`🎉 Success: ${resData.message}`);
+      } else {
+        alert(resData.detail || 'Failed to reset password.');
+      }
+    } catch (e) {
+      alert('Network error connecting to backend.');
+    }
+  };
+
   const activeFacultyId = currentUser?.role === 'faculty' ? currentUser.id : '';
 
   const filteredSubjects = data.subjects.filter(s => {
@@ -183,25 +202,6 @@ export default function CollegeDashboard() {
     </div>
   );
 
-  const handleAdminResetPin = async (facultyId, facultyName) => {
-    if (!window.confirm(`Are you sure you want to reset password for ${facultyName} (${facultyId}) back to 1234?`)) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/reset-faculty-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faculty_id: facultyId })
-      });
-      const resData = await res.json();
-      if (res.ok) {
-        alert(`🎉 Success: ${resData.message}`);
-      } else {
-        alert(resData.detail || 'Failed to reset password.');
-      }
-    } catch (e) {
-      alert('Network error connecting to backend.');
-    }
-  };
-
   const renderFacultyTable = () => (
     <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
@@ -226,16 +226,7 @@ export default function CollegeDashboard() {
                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                     <button
                       onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#fef2f2',
-                        border: '1px solid #fca5a5',
-                        color: '#dc2626',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
+                      style={{ padding: '6px 12px', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
                       🔑 Reset PIN to 1234
                     </button>
@@ -261,23 +252,13 @@ export default function CollegeDashboard() {
           <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', marginBottom: '1.5rem' }}>
             <button
               onClick={() => { setLoginMode('faculty'); setLoginError(''); }}
-              style={{
-                flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer',
-                backgroundColor: loginMode === 'faculty' ? 'white' : 'transparent',
-                color: loginMode === 'faculty' ? '#2563eb' : '#64748b',
-                boxShadow: loginMode === 'faculty' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-              }}
+              style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: loginMode === 'faculty' ? 'white' : 'transparent', color: loginMode === 'faculty' ? '#2563eb' : '#64748b', boxShadow: loginMode === 'faculty' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
             >
               Faculty Portal
             </button>
             <button
               onClick={() => { setLoginMode('admin'); setLoginError(''); }}
-              style={{
-                flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer',
-                backgroundColor: loginMode === 'admin' ? 'white' : 'transparent',
-                color: loginMode === 'admin' ? '#2563eb' : '#64748b',
-                boxShadow: loginMode === 'admin' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-              }}
+              style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: loginMode === 'admin' ? 'white' : 'transparent', color: loginMode === 'admin' ? '#2563eb' : '#64748b', boxShadow: loginMode === 'admin' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
             >
               Admin Portal
             </button>
@@ -295,57 +276,21 @@ export default function CollegeDashboard() {
                 {loginMode === 'faculty' ? 'Faculty ID / Email' : 'Admin Username'}
               </label>
               {loginMode === 'faculty' ? (
-                <select
-                  value={loginInput.id}
-                  onChange={e => setLoginInput({ ...loginInput, id: e.target.value })}
-                  required
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', backgroundColor: 'white' }}
-                >
+                <select value={loginInput.id} onChange={e => setLoginInput({ ...loginInput, id: e.target.value })} required style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', backgroundColor: 'white' }}>
                   <option value="">-- Select Your Name / ID --</option>
-                  {data.faculty.map(f => (
-                    <option key={f.faculty_id} value={f.faculty_id}>
-                      {f.name} ({f.faculty_id})
-                    </option>
-                  ))}
+                  {data.faculty.map(f => <option key={f.faculty_id} value={f.faculty_id}>{f.name} ({f.faculty_id})</option>)}
                 </select>
               ) : (
-                <input
-                  type="text"
-                  placeholder="Enter admin username"
-                  value={loginInput.id}
-                  onChange={e => setLoginInput({ ...loginInput, id: e.target.value })}
-                  required
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
-                />
+                <input type="text" placeholder="Enter admin username" value={loginInput.id} onChange={e => setLoginInput({ ...loginInput, id: e.target.value })} required style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
               )}
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}>
-                Password / Security PIN
-              </label>
-              <input
-                type="password"
-                placeholder={loginMode === 'faculty' ? 'Default PIN is 1234' : 'Enter admin password'}
-                value={loginInput.password}
-                onChange={e => setLoginInput({ ...loginInput, password: e.target.value })}
-                required
-                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}
-              />
-              {loginMode === 'faculty' && (
-                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Default PIN is <strong>1234</strong>
-                </span>
-              )}
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}>Password / Security PIN</label>
+              <input type="password" placeholder={loginMode === 'faculty' ? 'Default PIN is 1234' : 'Enter admin password'} value={loginInput.password} onChange={e => setLoginInput({ ...loginInput, password: e.target.value })} required style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
             </div>
 
-            <button
-              type="submit"
-              style={{
-                width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none',
-                borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', marginTop: '0.5rem', transition: 'background 0.2s'
-              }}
-            >
+            <button type="submit" style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', marginTop: '0.5rem', transition: 'background 0.2s' }}>
               Sign In to Dashboard
             </button>
           </form>
@@ -354,9 +299,11 @@ export default function CollegeDashboard() {
     );
   }
 
+  // THIS IS THE CRITICAL FIX: The tabs array was missing the new features
   const availableTabs = currentUser.role === 'faculty'
     ? ['overview', 'attendance', 'marks', 'reports']
     : ['overview', 'attendance', 'edit_attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
+
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
       
@@ -374,22 +321,10 @@ export default function CollegeDashboard() {
               {currentUser.role === 'faculty' ? `Faculty ID: ${currentUser.id}` : 'System Administrator'}
             </div>
           </div>
-
           {currentUser.role === 'faculty' && (
-            <button
-              onClick={() => { setShowPasswordModal(true); setPassMessage({ error: '', success: '' }); }}
-              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#334155', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-            >
-              🔑 Change PIN
-            </button>
+            <button onClick={() => { setShowPasswordModal(true); setPassMessage({ error: '', success: '' }); }} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#334155', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>🔑 Change PIN</button>
           )}
-
-          <button
-            onClick={handleLogout}
-            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-          >
-            Sign Out
-          </button>
+          <button onClick={handleLogout} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Sign Out</button>
         </div>
       </div>
 
@@ -449,6 +384,7 @@ export default function CollegeDashboard() {
         ))}
       </div>
 
+      {}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
           <p>Loading your cloud database...</p>
@@ -494,7 +430,7 @@ export default function CollegeDashboard() {
 }
 
 // -----------------------------------------------------------------------------
-// NEW: OVERVIEW DASHBOARD (ANALYTICS & CHARTS)
+// OVERVIEW DASHBOARD (ANALYTICS & CHARTS)
 // -----------------------------------------------------------------------------
 function OverviewDashboard({ currentUser }) {
   const [data, setData] = useState(null);
@@ -576,13 +512,13 @@ function OverviewDashboard({ currentUser }) {
 }
 
 // -----------------------------------------------------------------------------
-// NEW: ADMIN EDIT PAST ATTENDANCE (INCLUDES CALENDAR DATE PICKER)
+// ADMIN EDIT PAST ATTENDANCE (INCLUDES CALENDAR DATE PICKER)
 // -----------------------------------------------------------------------------
 function AdminEditAttendance({ subjects = [] }) {
   const [subject, setSubject] = useState('');
   const [batch, setBatch] = useState('All');
   const [lectureSeq, setLectureSeq] = useState(1);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // THE DATE PICKER
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]); 
   
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -592,16 +528,13 @@ function AdminEditAttendance({ subjects = [] }) {
     if (!subject || !date) return alert("Select subject and date.");
     setLoading(true);
     try {
-      // 1. Fetch Students
       const studentRes = await fetch(`${API_BASE_URL}/students?batch=${batch}&subject_id=${subject}`);
       const studentList = await studentRes.json();
       setStudents(Array.isArray(studentList) ? studentList : []);
 
-      // 2. Fetch Existing Records for this specific past date
       const recordRes = await fetch(`${API_BASE_URL}/attendance/records?subject_id=${subject}&target_date=${date}&lecture_sequence=${lectureSeq}`);
       const pastRecords = await recordRes.json();
 
-      // 3. Merge them (If no past record, default to Absent to prevent accidental presents)
       const mergedState = {};
       (Array.isArray(studentList) ? studentList : []).forEach(s => {
         mergedState[s.student_id] = pastRecords[s.student_id] || 'Absent';
@@ -617,7 +550,7 @@ function AdminEditAttendance({ subjects = [] }) {
     setLoading(true);
     const payload = {
       subject_id: subject,
-      date: date, // Submits the specific past date
+      date: date,
       lecture_sequence: lectureSeq, 
       records: Object.entries(attendance).map(([student_id, status]) => ({ student_id, status }))
     };
@@ -643,7 +576,6 @@ function AdminEditAttendance({ subjects = [] }) {
       
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#fef2f2', padding: '16px', borderRadius: '8px' }}>
         
-        {/* THE EXCLUSIVE ADMIN DATE PICKER */}
         <input 
           type="date" 
           value={date} 
@@ -710,17 +642,16 @@ function AdminEditAttendance({ subjects = [] }) {
 }
 
 // -----------------------------------------------------------------------------
-// EXISTING: ATTENDANCE ENTRY (TEACHERS - NO DATE PICKER)
+// ATTENDANCE ENTRY (TEACHERS - NO DATE PICKER)
 // -----------------------------------------------------------------------------
 function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [subject, setSubject] = useState('');
   const [batch, setBatch] = useState('All');
-  const [lectureSeq, setLectureSeq] = useState(1); // <-- THE NEW DROPDOWN STATE
+  const [lectureSeq, setLectureSeq] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // SMART BATCH LOGIC (Includes 'E' Batch)
   let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E']; 
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
@@ -759,7 +690,6 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     if (!subject) return alert("Select a subject first.");
     setLoading(true);
     
-    // THE NEW PAYLOAD WITH LECTURE_SEQUENCE
     const payload = {
       subject_id: subject,
       date: new Date().toISOString().split('T')[0],
@@ -788,26 +718,15 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
       
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
         
-        <select 
-          value={subject} 
-          onChange={e => setSubject(e.target.value)} 
-          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '200px', backgroundColor: 'white' }}
-        >
+        <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '200px', backgroundColor: 'white' }}>
           <option value="">-- Select Your Allocated Subject --</option>
-          {subjects.map(s => (
-             <option key={s.subject_code} value={s.subject_code}>
-               {s.subject_code} - {s.subject_name}
-             </option>
-          ))}
+          {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
         </select>
 
         <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
-          {allowedBatches.map(b => (
-             <option key={b} value={b}>{b.toLowerCase() === 'all' ? 'All Batches' : `Batch ${b}`}</option>
-          ))}
+          {allowedBatches.map(b => <option key={b} value={b}>{b.toLowerCase() === 'all' ? 'All Batches' : `Batch ${b}`}</option>)}
         </select>
 
-        {/* THE VISIBLE LECTURE SEQUENCE DROPDOWN */}
         <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
           <option value={1}>Lecture 1</option>
           <option value={2}>Lecture 2</option>
@@ -837,10 +756,7 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
                   <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                     <button 
                       onClick={() => setAttendance({ ...attendance, [s.student_id]: attendance[s.student_id] === 'Present' ? 'Absent' : 'Present' })}
-                      style={{ 
-                        background: attendance[s.student_id] === 'Present' ? '#22c55e' : '#ef4444', 
-                        color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', width: '100px' 
-                      }}>
+                      style={{ background: attendance[s.student_id] === 'Present' ? '#22c55e' : '#ef4444', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', width: '100px' }}>
                       {attendance[s.student_id]}
                     </button>
                   </td>
