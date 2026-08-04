@@ -187,8 +187,6 @@ def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session 
     return {"program": program, "semester": semester, "examName": exam_name, "subjects": subject_dicts, "students": result}
 
 # ---------------------------------------------------------
-# 3. SINGLE SUBJECT ATTENDANCE REPORT (NOW SUPPORTS DATE)
-# ---------------------------------------------------------
 # 3. SINGLE SUBJECT ATTENDANCE REPORT
 # ---------------------------------------------------------
 @router.get("/attendance/{subject_id}")
@@ -197,7 +195,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     subject = db.get(Subject, search_code)
     
     if not subject:
-        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
         if match:
             alpha = match.group(1)
@@ -239,32 +237,33 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         is_present = r.status and r.status.lower() == "present"
         student_attendance_map[key][(r.date, seq)] = "P" if is_present else "A"
 
-    target_semester = subject.semester
-    is_m_pharm = False
+    # Safely extract target semester and program type
+    target_semester = 0
+    try: target_semester = int(subject.semester) if subject.semester else 0
+    except: pass
     
-    if subject.program:
-        prog_upper = subject.program.upper().replace(" ", "")
-        if "M.PHARM" in prog_upper:
-            is_m_pharm = True
-            
-    if not target_semester:
-        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code)
+    if target_semester == 0:
+        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code.upper())
         if match: target_semester = int(match.group(1))
+
+    is_m_pharm = False
+    sub_prog = (subject.program or "").upper().replace(" ", "")
+    if sub_prog.startswith("M"): is_m_pharm = True
+    elif search_code.startswith("MP") or search_code.startswith("M."): is_m_pharm = True
             
-    stmt = select(Student)
-    if target_semester:
-        stmt = stmt.where(Student.semester == target_semester)
+    all_students = db.exec(select(Student)).all()
+    students = []
+    for stu in all_students:
+        sem = 0
+        try: sem = int(stu.semester) if stu.semester else 0
+        except: pass
         
-    if is_m_pharm:
-        stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
-    else:
-        stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
-        
-    students = db.exec(stmt).all()
-    
-    if not students and target_semester:
-        fallback_stmt = select(Student).where(Student.semester == target_semester)
-        students = db.exec(fallback_stmt).all()
+        stu_is_m = False
+        stu_prog = (stu.program or "").upper().replace(" ", "")
+        if stu_prog.startswith("M"): stu_is_m = True
+            
+        if sem == target_semester and stu_is_m == is_m_pharm:
+            students.append(stu)
 
     # 4. Build the final response with the daily status array
     result = []
@@ -295,7 +294,6 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         "sessions": session_headers,
         "students": sorted(result, key=lambda x: x['name'])
     }
-# ... existing code ...
     for s in students:
         attended = len(student_attended_sessions.get(s.student_id, set()))
         perc = (attended / total_classes) * 100 if total_classes > 0 else 0
