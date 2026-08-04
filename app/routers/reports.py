@@ -204,40 +204,8 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
             
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found in database")
-    
-    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
-    
-    # 1. Extract unique sessions and sort them chronologically
-    session_set = set()
-    for r in records:
-        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
-        session_set.add((r.date, seq))
-        
-    sorted_sessions = sorted(list(session_set), key=lambda x: (x[0], x[1]))
-    
-    # 2. Create column headers (e.g., "04-Aug" or "04-Aug (L2)")
-    session_headers = []
-    for d, seq in sorted_sessions:
-        date_str = d.strftime("%d-%b")
-        session_headers.append(f"{date_str} (L{seq})" if seq > 1 else date_str)
-        
-    total_classes = len(sorted_sessions)
-    
-    if total_classes == 0:
-        return {"subject": subject.subject_name, "total_classes": 0, "sessions": [], "students": []}
-        
-    # 3. Map student attendance into a P/A grid format
-    student_attendance_map = {}
-    for r in records:
-        key = r.student_id
-        if key not in student_attendance_map:
-            student_attendance_map[key] = {}
-            
-        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
-        is_present = r.status and r.status.lower() == "present"
-        student_attendance_map[key][(r.date, seq)] = "P" if is_present else "A"
 
-    # Safely extract target semester and program type
+    # 1. Fetch Students FIRST (So they show up even if classes are 0)
     target_semester = 0
     try: target_semester = int(subject.semester) if subject.semester else 0
     except: pass
@@ -264,8 +232,35 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
             
         if sem == target_semester and stu_is_m == is_m_pharm:
             students.append(stu)
+    
+    # 2. Fetch Attendance Records
+    records = db.exec(select(Attendance).where(Attendance.subject_id == subject.subject_code)).all()
+    
+    session_set = set()
+    for r in records:
+        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+        session_set.add((r.date, seq))
+        
+    sorted_sessions = sorted(list(session_set), key=lambda x: (x[0], x[1]))
+    
+    session_headers = []
+    for d, seq in sorted_sessions:
+        date_str = d.strftime("%d-%b")
+        session_headers.append(f"{date_str} (L{seq})" if seq > 1 else date_str)
+        
+    total_classes = len(sorted_sessions)
+        
+    student_attendance_map = {}
+    for r in records:
+        key = r.student_id
+        if key not in student_attendance_map:
+            student_attendance_map[key] = {}
+            
+        seq = r.lecture_sequence if r.lecture_sequence is not None else 1
+        is_present = r.status and r.status.lower() == "present"
+        student_attendance_map[key][(r.date, seq)] = "P" if is_present else "A"
 
-    # 4. Build the final response with the daily status array
+    # 3. Build the final response matrix
     result = []
     for s in students:
         s_map = student_attendance_map.get(s.student_id, {})
@@ -273,7 +268,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         attended = 0
         
         for sess in sorted_sessions:
-            status = s_map.get(sess, "-") # '-' means not marked for that day
+            status = s_map.get(sess, "-")
             if status == "P":
                 attended += 1
             daily_status.append(status)
