@@ -295,3 +295,72 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         "sessions": session_headers,
         "students": sorted(result, key=lambda x: x['name'])
     }
+# ... existing code ...
+    for s in students:
+        attended = len(student_attended_sessions.get(s.student_id, set()))
+        perc = (attended / total_classes) * 100 if total_classes > 0 else 0
+        
+        result.append({
+            "student_id": s.student_id,
+            "name": s.full_name,
+            "attended": attended,
+            "percentage": round(min(perc, 100), 2)
+        })
+        
+    return {
+        "subject": subject.subject_name, 
+        "total_classes": total_classes, 
+        "students": sorted(result, key=lambda x: x['name'])
+    }
+
+# ---------------------------------------------------------
+# NEW: DASHBOARD ANALYTICS (Charts & Stats)
+# ---------------------------------------------------------
+from app.models import Faculty, FacultyAllocation
+
+@router.get("/analytics/dashboard")
+def get_dashboard_analytics(faculty_id: str = None, db: Session = Depends(get_db)):
+    # 1. Base Stats
+    stats = {
+        "total_students": len(db.exec(select(Student)).all()),
+        "total_faculty": len(db.exec(select(Faculty)).all()),
+        "total_subjects": len(db.exec(select(Subject)).all())
+    }
+    
+    # 2. Determine which subjects to analyze based on Role
+    sub_query = select(Subject)
+    if faculty_id and faculty_id != "ADMIN":
+        allocs = db.exec(select(FacultyAllocation).where(FacultyAllocation.faculty_id == faculty_id)).all()
+        allocated_subs = [a.subject_id for a in allocs]
+        sub_query = sub_query.where(Subject.subject_code.in_(allocated_subs))
+    
+    subjects = db.exec(sub_query).all()
+    
+    # 3. Calculate Average Attendance per Subject for the Bar Chart
+    chart_data = []
+    for sub in subjects:
+        records = db.exec(select(Attendance).where(Attendance.subject_id == sub.subject_code)).all()
+        if not records:
+            continue
+            
+        sessions = set([(r.date, r.lecture_sequence if r.lecture_sequence is not None else 1) for r in records])
+        total_unique_classes = len(sessions)
+        
+        if total_unique_classes == 0:
+            continue
+            
+        # Total possible seats = unique classes * students in that class
+        present_count = sum(1 for r in records if r.status.lower() == 'present')
+        absent_count = sum(1 for r in records if r.status.lower() == 'absent')
+        total_marks = present_count + absent_count
+        
+        perc = (present_count / total_marks * 100) if total_marks > 0 else 0
+        chart_data.append({
+            "name": sub.subject_code, 
+            "attendance": round(perc, 1)
+        })
+        
+    # Sort chart data so best attendance is first, limit to top 15 to keep charts clean
+    chart_data.sort(key=lambda x: x["attendance"], reverse=True)
+    
+    return {"stats": stats, "chartData": chart_data[:15]}

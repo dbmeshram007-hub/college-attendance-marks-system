@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Reports from './Reports';
 import MarksEntry from './MarksEntry';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 
 const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 
 export default function CollegeDashboard() {
-  const [activeTab, setActiveTab] = useState('attendance');
+  const [activeTab, setActiveTab] = useState('overview'); // OVERVIEW IS NOW DEFAULT
   const [currentUser, setCurrentUser] = useState(null); // Null = Not logged in
   const [loginMode, setLoginMode] = useState('faculty'); // 'faculty' or 'admin'
   const [loginInput, setLoginInput] = useState({ id: '', password: '' });
@@ -354,9 +355,8 @@ export default function CollegeDashboard() {
   }
 
   const availableTabs = currentUser.role === 'faculty'
-    ? ['attendance', 'marks', 'reports']
-    : ['attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
-
+    ? ['overview', 'attendance', 'marks', 'reports']
+    : ['overview', 'attendance', 'edit_attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
       
@@ -440,10 +440,11 @@ export default function CollegeDashboard() {
               padding: '10px 20px', cursor: 'pointer', border: 'none',
               backgroundColor: activeTab === tab ? '#2563eb' : '#f1f5f9',
               color: activeTab === tab ? 'white' : '#475569',
-              borderRadius: '8px', fontWeight: '600', textTransform: 'capitalize', transition: 'all 0.2s'
+              borderRadius: '8px', fontWeight: '600', textTransform: 'capitalize', transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
           >
-            {tab}
+            {tab.replace('_', ' ')}
           </button>
         ))}
       </div>
@@ -454,6 +455,8 @@ export default function CollegeDashboard() {
         </div>
       ) : (
         <div style={{ animation: 'fadeIn 0.3s' }}>
+          {activeTab === 'overview' && <OverviewDashboard currentUser={currentUser} />}
+          
           {activeTab === 'students' && renderTable(['ID', 'Name', 'Program', 'Semester', 'Batch'], data.students, ['student_id', 'full_name', 'program', 'semester', 'batch_group'])}
           {activeTab === 'faculty' && renderFacultyTable()}
           {activeTab === 'subjects' && renderTable(['Code', 'Name', 'Program', 'Semester'], data.subjects, ['subject_code', 'subject_name', 'program', 'semester'])}
@@ -465,6 +468,9 @@ export default function CollegeDashboard() {
               activeFaculty={activeFacultyId} 
               allocations={data.allocations} 
             />
+          )}
+          {activeTab === 'edit_attendance' && (
+            <AdminEditAttendance subjects={data.subjects} />
           )}
           {activeTab === 'marks' && (
             <MarksEntry 
@@ -488,7 +494,223 @@ export default function CollegeDashboard() {
 }
 
 // -----------------------------------------------------------------------------
-// NEW ATTENDANCE COMPONENT WITH LECTURE SEQUENCE DROPDOWN
+// NEW: OVERVIEW DASHBOARD (ANALYTICS & CHARTS)
+// -----------------------------------------------------------------------------
+function OverviewDashboard({ currentUser }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchAnalytics() {
+      try {
+        const facId = currentUser.role === 'admin' ? 'ADMIN' : currentUser.id;
+        const res = await fetch(`${API_BASE_URL}/reports/analytics/dashboard?faculty_id=${facId}`);
+        setData(await res.json());
+      } catch (e) {
+        console.error("Failed to load analytics");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAnalytics();
+  }, [currentUser]);
+
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading Analytics...</div>;
+  if (!data) return null;
+
+  return (
+    <div>
+      {/* STAT CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ fontSize: '32px' }}>🎓</div>
+          <div>
+            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Total Enrolled</div>
+            <div style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a' }}>{data.stats.total_students}</div>
+          </div>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ fontSize: '32px' }}>👨‍🏫</div>
+          <div>
+            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Active Faculty</div>
+            <div style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a' }}>{data.stats.total_faculty}</div>
+          </div>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ fontSize: '32px' }}>📚</div>
+          <div>
+            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Total Subjects</div>
+            <div style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a' }}>{data.stats.total_subjects}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* BAR CHART */}
+      <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#0f172a' }}>Subject Attendance Performance (%)</h3>
+        {data.chartData.length > 0 ? (
+          <div style={{ width: '100%', height: '350px' }}>
+            <ResponsiveContainer>
+              <BarChart data={data.chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
+                <Tooltip 
+                  cursor={{ fill: '#f1f5f9' }}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                />
+                <Bar dataKey="attendance" name="Attendance %" radius={[6, 6, 0, 0]} animationDuration={1500}>
+                  {data.chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.attendance < 75 ? '#ef4444' : '#3b82f6'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p style={{ color: '#64748b', fontStyle: 'italic' }}>Not enough attendance data collected yet to build charts.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// NEW: ADMIN EDIT PAST ATTENDANCE (INCLUDES CALENDAR DATE PICKER)
+// -----------------------------------------------------------------------------
+function AdminEditAttendance({ subjects = [] }) {
+  const [subject, setSubject] = useState('');
+  const [batch, setBatch] = useState('All');
+  const [lectureSeq, setLectureSeq] = useState(1);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // THE DATE PICKER
+  
+  const [students, setStudents] = useState([]);
+  const [attendance, setAttendance] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const fetchStudentsAndRecords = async () => {
+    if (!subject || !date) return alert("Select subject and date.");
+    setLoading(true);
+    try {
+      // 1. Fetch Students
+      const studentRes = await fetch(`${API_BASE_URL}/students?batch=${batch}&subject_id=${subject}`);
+      const studentList = await studentRes.json();
+      setStudents(Array.isArray(studentList) ? studentList : []);
+
+      // 2. Fetch Existing Records for this specific past date
+      const recordRes = await fetch(`${API_BASE_URL}/attendance/records?subject_id=${subject}&target_date=${date}&lecture_sequence=${lectureSeq}`);
+      const pastRecords = await recordRes.json();
+
+      // 3. Merge them (If no past record, default to Absent to prevent accidental presents)
+      const mergedState = {};
+      (Array.isArray(studentList) ? studentList : []).forEach(s => {
+        mergedState[s.student_id] = pastRecords[s.student_id] || 'Absent';
+      });
+      setAttendance(mergedState);
+
+    } catch (e) { console.error(e); alert("Error fetching data."); }
+    finally { setLoading(false); }
+  };
+
+  const handleSave = async () => {
+    if (!subject || !date) return alert("Missing data.");
+    setLoading(true);
+    const payload = {
+      subject_id: subject,
+      date: date, // Submits the specific past date
+      lecture_sequence: lectureSeq, 
+      records: Object.entries(attendance).map(([student_id, status]) => ({ student_id, status }))
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/attendance/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) alert("🎉 Past attendance updated successfully!");
+      else alert("Failed to update.");
+    } catch (e) { alert("Error connecting to server."); } 
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #fca5a5', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+        <span style={{ fontSize: '24px' }}>👑</span>
+        <h2 style={{ margin: 0, color: '#991b1b' }}>Admin Overwrite: Edit Past Attendance</h2>
+      </div>
+      
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#fef2f2', padding: '16px', borderRadius: '8px' }}>
+        
+        {/* THE EXCLUSIVE ADMIN DATE PICKER */}
+        <input 
+          type="date" 
+          value={date} 
+          onChange={e => setDate(e.target.value)} 
+          style={{ padding: '10px', borderRadius: '6px', border: '1px solid #fca5a5', fontWeight: 'bold', color: '#991b1b' }}
+        />
+
+        <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '200px' }}>
+          <option value="">-- Select Subject --</option>
+          {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
+        </select>
+
+        <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          {['All', 'A', 'B', 'C', 'D', 'E'].map(b => <option key={b} value={b}>{b === 'All' ? 'All Batches' : `Batch ${b}`}</option>)}
+        </select>
+
+        <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          <option value={1}>Lecture 1</option>
+          <option value={2}>Lecture 2</option>
+          <option value={3}>Lecture 3</option>
+        </select>
+        
+        <button onClick={fetchStudentsAndRecords} disabled={loading || !subject} style={{ padding: '10px 20px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          {loading ? 'Searching...' : 'Pull Past Records'}
+        </button>
+      </div>
+      
+      {students.length > 0 ? (
+        <>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ padding: '12px 8px', textAlign: 'left' }}>Student Name</th>
+                <th style={{ padding: '12px 8px', textAlign: 'center' }}>Overwrite Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map(s => (
+                <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '12px 8px', fontWeight: '500' }}>{s.full_name} <br/><span style={{ fontSize: '0.8em', color: '#64748b' }}>{s.student_id}</span></td>
+                  <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                    <button 
+                      onClick={() => setAttendance({ ...attendance, [s.student_id]: attendance[s.student_id] === 'Present' ? 'Absent' : 'Present' })}
+                      style={{ 
+                        background: attendance[s.student_id] === 'Present' ? '#22c55e' : '#ef4444', 
+                        color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', width: '100px' 
+                      }}>
+                      {attendance[s.student_id]}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: '20px', textAlign: 'right' }}>
+             <button onClick={handleSave} disabled={loading} style={{ padding: '12px 24px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
+                {loading ? 'Overwriting...' : 'Overwrite Attendance'}
+             </button>
+          </div>
+        </>
+      ) : <p style={{ color: '#64748b', fontStyle: 'italic' }}>Select a past date, subject, and batch, then click "Pull Past Records" to edit.</p>}
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// EXISTING: ATTENDANCE ENTRY (TEACHERS - NO DATE PICKER)
 // -----------------------------------------------------------------------------
 function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [students, setStudents] = useState([]);

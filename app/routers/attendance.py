@@ -6,9 +6,10 @@ from sqlmodel import Session, select
 from app.database import get_db
 from app.models import Attendance, Subject
 import re
+
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
-class AttendanceRecord(BaseModel):
+class StudentRecord(BaseModel):
     student_id: str
     status: str
 
@@ -16,7 +17,7 @@ class SubmitAttendancePayload(BaseModel):
     subject_id: str
     date: date
     lecture_sequence: int = 1
-    records: List[AttendanceRecord]
+    records: List[StudentRecord]
 
 @router.post("/submit")
 def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(get_db)):
@@ -62,3 +63,30 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
             
     db.commit()
     return {"message": "Attendance saved successfully"}
+
+# ---------------------------------------------------------
+# NEW: FETCH PAST ATTENDANCE (For Admin Editing)
+# ---------------------------------------------------------
+@router.get("/records")
+def get_attendance_records(subject_id: str, target_date: date, lecture_sequence: int = 1, db: Session = Depends(get_db)):
+    search_code = subject_id.strip().upper()
+    
+    # Same bulletproof subject fallback
+    subject = db.get(Subject, search_code)
+    if not subject:
+        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
+            if subject:
+                search_code = subject.subject_code
+
+    records = db.exec(select(Attendance).where(
+        Attendance.subject_id == search_code,
+        Attendance.date == target_date,
+        Attendance.lecture_sequence == lecture_sequence
+    )).all()
+    
+    return {r.student_id: r.status for r in records}
