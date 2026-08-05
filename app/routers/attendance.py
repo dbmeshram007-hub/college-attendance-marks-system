@@ -24,6 +24,7 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
     search_code = payload.subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
+    # Bulletproof fallback allowing underscores for Theory/Practical split
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
@@ -64,14 +65,15 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
     db.commit()
     return {"message": "Attendance saved successfully"}
 
+
 # ---------------------------------------------------------
-# NEW: FETCH PAST ATTENDANCE (For Admin Editing)
+# FETCH PAST ATTENDANCE (For Admin Editing)
 # ---------------------------------------------------------
 @router.get("/records")
 def get_attendance_records(subject_id: str, target_date: date, lecture_sequence: int = 1, db: Session = Depends(get_db)):
     search_code = subject_id.strip().upper()
     
-    # Same bulletproof subject fallback
+    # Bulletproof fallback allowing underscores for Theory/Practical split
     subject = db.get(Subject, search_code)
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
@@ -90,3 +92,45 @@ def get_attendance_records(subject_id: str, target_date: date, lecture_sequence:
     )).all()
     
     return {r.student_id: r.status for r in records}
+
+
+# ---------------------------------------------------------
+# DELETE PAST ATTENDANCE SESSION (Admin Only)
+# ---------------------------------------------------------
+@router.delete("/session")
+def delete_attendance_session(
+    subject_id: str, 
+    target_date: date, 
+    lecture_sequence: int = 1, 
+    db: Session = Depends(get_db)
+):
+    search_code = subject_id.strip().upper()
+    
+    # Bulletproof fallback allowing underscores for Theory/Practical split
+    subject = db.get(Subject, search_code)
+    if not subject:
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
+            if subject:
+                search_code = subject.subject_code
+
+    # Find all records for this exact day, subject, and lecture number
+    records = db.exec(select(Attendance).where(
+        Attendance.subject_id == search_code,
+        Attendance.date == target_date,
+        Attendance.lecture_sequence == lecture_sequence
+    )).all()
+    
+    if not records:
+        raise HTTPException(status_code=404, detail="No attendance records found for this specific date and lecture.")
+        
+    count = len(records)
+    for r in records:
+        db.delete(r)
+        
+    db.commit()
+    return {"message": f"Successfully deleted {count} attendance records. The lecture has been completely removed."}
