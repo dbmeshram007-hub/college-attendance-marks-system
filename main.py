@@ -69,7 +69,9 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
+        # FIXED: Check if it STARTS with M to avoid triggering on B.PHAR"M"
+        sub_prog = (subject.program or "").upper().strip()
+        if sub_prog.startswith("M") or "MASTER" in sub_prog:
             is_m_pharm = True
     else:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
@@ -97,6 +99,13 @@ def get_students(
     
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
+        
+        # FIXED: Make sure the fallback also respects the Program boundary
+        if is_m_pharm:
+            fallback_stmt = fallback_stmt.where(Student.program.ilike("%M%Pharm%"))
+        else:
+            fallback_stmt = fallback_stmt.where(Student.program.ilike("%B%Pharm%"))
+            
         if batch and batch.strip() != "" and batch.strip().lower() != "all":
             clean_batch = batch.strip().split("_")[-1] if "_" in batch.strip() else batch.strip().replace("Batch ", "").replace("Batch", "").strip()
             fallback_stmt = fallback_stmt.where(Student.batch_group.contains(clean_batch))
