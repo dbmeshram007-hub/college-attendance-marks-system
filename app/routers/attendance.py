@@ -25,7 +25,7 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
     subject = db.get(Subject, search_code)
     
     if not subject:
-        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
         if match:
             alpha = match.group(1)
@@ -74,7 +74,7 @@ def get_attendance_records(subject_id: str, target_date: date, lecture_sequence:
     # Same bulletproof subject fallback
     subject = db.get(Subject, search_code)
     if not subject:
-        clean_code = re.sub(r'[^A-Z0-9]', '', search_code)
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
         if match:
             alpha = match.group(1)

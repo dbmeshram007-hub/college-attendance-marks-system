@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlmodel import Session, select
 from app.database import get_db
 from app.models import InternalExam, ExamMark, ExamStatusEnum, Subject
+import re
 
 router = APIRouter(prefix="/api/marks", tags=["Exam Marks"])
 
@@ -30,13 +31,14 @@ def get_or_create_exam(
     # 1. Prevent Foreign Key crash by checking if subject exists!
     subject = db.get(Subject, search_code)
     
-    # SMART FALLBACK: If user types "BP501TP" but DB has "BP501T"
+    # BULLETPROOF FALLBACK: Handles spaces, hyphens, and missing suffixes in DB
     if not subject:
-        import re
-        base_match = re.match(r'([A-Z]+\d{3})', search_code)
-        if base_match:
-            base_code = base_match.group(1)
-            subject = db.exec(select(Subject).where(Subject.subject_code.startswith(base_code))).first()
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
             if subject:
                 search_code = subject.subject_code
 
