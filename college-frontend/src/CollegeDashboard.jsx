@@ -6,13 +6,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 const API_BASE_URL = 'https://college-backend-007.onrender.com/api'; // Make sure this matches your live backend!
 
 export default function CollegeDashboard() {
-  const [activeTab, setActiveTab] = useState('overview'); // OVERVIEW IS NOW DEFAULT
-  const [currentUser, setCurrentUser] = useState(null); // Null = Not logged in
-  const [loginMode, setLoginMode] = useState('admin'); // 'faculty' or 'admin'
+  const [activeTab, setActiveTab] = useState('overview'); 
+  const [currentUser, setCurrentUser] = useState(null); 
+  const [loginMode, setLoginMode] = useState('admin'); 
   const [loginInput, setLoginInput] = useState({ id: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // Password Change Modal State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passForm, setPassForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [passMessage, setPassMessage] = useState({ error: '', success: '' });
@@ -81,7 +80,6 @@ export default function CollegeDashboard() {
         setLoginError('Invalid Admin credentials! (Use Username: admin / Password: admin123)');
       }
     } else {
-      // Faculty Login
       const foundFaculty = data.faculty.find(
         f => f.faculty_id.toLowerCase() === loginInput.id.trim().toLowerCase() ||
              f.email.toLowerCase() === loginInput.id.trim().toLowerCase()
@@ -109,7 +107,7 @@ export default function CollegeDashboard() {
     setCurrentUser(null);
     localStorage.removeItem('college_app_user');
     setLoginInput({ id: '', password: '' });
-    window.location.reload(); // NEW: Force a page reload on logout to clear all sensitive memory and fetch fresh passwords
+    window.location.reload(); 
   };
 
   const handleChangePassword = async (e) => {
@@ -142,15 +140,12 @@ export default function CollegeDashboard() {
 
       if (res.ok) {
         setPassMessage({ error: '', success: '🎉 Password updated successfully!' });
-        
-        // NEW: Update frontend memory immediately
         setData(prev => ({
           ...prev,
           faculty: prev.faculty.map(f => 
             f.faculty_id === currentUser.id ? { ...f, password: passForm.newPassword } : f
           )
         }));
-
         setPassForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setTimeout(() => setShowPasswordModal(false), 2000);
       } else {
@@ -174,15 +169,12 @@ export default function CollegeDashboard() {
       const resData = await res.json();
       if (res.ok) {
         alert(`🎉 Success: ${resData.message}`);
-        
-        // NEW: Update frontend memory immediately
         setData(prev => ({
           ...prev,
           faculty: prev.faculty.map(f => 
             f.faculty_id === facultyId ? { ...f, password: '1234' } : f
           )
         }));
-
       } else {
         alert(resData.detail || 'Failed to reset password.');
       }
@@ -194,7 +186,7 @@ export default function CollegeDashboard() {
   const activeFacultyId = currentUser?.role === 'faculty' ? currentUser.id : '';
 
   const filteredSubjects = data.subjects.filter(s => {
-    if (!activeFacultyId) return true; // Admin sees all
+    if (!activeFacultyId) return true;
     return data.allocations.some(a => a.faculty_id === activeFacultyId && a.subject_id === s.subject_code);
   });
 
@@ -318,7 +310,6 @@ export default function CollegeDashboard() {
     );
   }
 
-  // THIS IS THE CRITICAL FIX: The tabs array was missing the new features
   const availableTabs = currentUser.role === 'faculty'
     ? ['overview', 'attendance', 'marks', 'reports']
     : ['overview', 'attendance', 'edit_attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
@@ -448,9 +439,6 @@ export default function CollegeDashboard() {
   );
 }
 
-// -----------------------------------------------------------------------------
-// OVERVIEW DASHBOARD (ANALYTICS & CHARTS)
-// -----------------------------------------------------------------------------
 function OverviewDashboard({ currentUser }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -530,9 +518,6 @@ function OverviewDashboard({ currentUser }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// ADMIN EDIT PAST ATTENDANCE (INCLUDES CALENDAR DATE PICKER)
-// -----------------------------------------------------------------------------
 function AdminEditAttendance({ subjects = [] }) {
   const [subject, setSubject] = useState('');
   const [batch, setBatch] = useState('All');
@@ -586,6 +571,34 @@ function AdminEditAttendance({ subjects = [] }) {
     finally { setLoading(false); }
   };
 
+  // DELETE FUNCTION
+  const handleDeleteSession = async () => {
+    if (!subject || !date) return alert("Missing data.");
+    
+    const confirmDelete = window.confirm(
+      `⚠️ DANGER: Are you sure you want to completely DELETE Lecture ${lectureSeq} for ${subject} on ${date}?\n\nThis will remove it from all reports. This action cannot be undone.`
+    );
+    
+    if (!confirmDelete) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/attendance/session?subject_id=${subject}&target_date=${date}&lecture_sequence=${lectureSeq}`, {
+        method: 'DELETE'
+      });
+      const resData = await res.json();
+      
+      if (res.ok) {
+        alert(`🗑️ ${resData.message}`);
+        setStudents([]); // Clear the table from the screen
+        setAttendance({});
+      } else {
+        alert(resData.detail || "Failed to delete.");
+      }
+    } catch (e) { alert("Error connecting to server."); } 
+    finally { setLoading(false); }
+  };
+
   return (
     <div style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #fca5a5', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -608,7 +621,11 @@ function AdminEditAttendance({ subjects = [] }) {
         </select>
 
         <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-          {['All', 'A', 'B', 'C', 'D', 'E'].map(b => <option key={b} value={b}>{b === 'All' ? 'All Batches' : `Batch ${b}`}</option>)}
+          {['All', 'A', 'B', 'C', 'D', 'E'].map(b => (
+            <option key={b} value={b}>
+              {b.toLowerCase() === 'all' ? 'All Batches' : (b.toLowerCase().includes('batch') ? b.replace('_', ' ') : `Batch ${b}`)}
+            </option>
+          ))}
         </select>
 
         <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
@@ -649,7 +666,10 @@ function AdminEditAttendance({ subjects = [] }) {
               ))}
             </tbody>
           </table>
-          <div style={{ marginTop: '20px', textAlign: 'right' }}>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+             <button onClick={handleDeleteSession} disabled={loading} style={{ padding: '12px 24px', background: 'white', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
+                {loading ? 'Processing...' : '🗑️ Delete Entire Lecture'}
+             </button>
              <button onClick={handleSave} disabled={loading} style={{ padding: '12px 24px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
                 {loading ? 'Overwriting...' : 'Overwrite Attendance'}
              </button>
@@ -660,9 +680,6 @@ function AdminEditAttendance({ subjects = [] }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// ATTENDANCE ENTRY (TEACHERS - NO DATE PICKER)
-// -----------------------------------------------------------------------------
 function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -679,18 +696,33 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     }
   }
 
+  // SMART EFFECT: Force batch selection if it's a practical
   useEffect(() => {
     if (subject && !subjects.find(s => s.subject_code === subject)) {
       setSubject('');
       setStudents([]);
     }
-    if (subject && !allowedBatches.includes(batch) && allowedBatches.length > 0) {
+    
+    // If they select a PRACTICAL subject, default the batch to 'A' instead of 'All'
+    if (subject && subject.includes('_PRACTICAL')) {
+      if (batch.toLowerCase() === 'all' || !allowedBatches.includes(batch)) {
+          const firstRealBatch = allowedBatches.find(b => b.toLowerCase() !== 'all') || 'A';
+          setBatch(firstRealBatch);
+      }
+    } else if (subject && !allowedBatches.includes(batch) && allowedBatches.length > 0) {
       setBatch(allowedBatches[0]);
     }
   }, [subjects, subject, activeFaculty, batch, allowedBatches]);
 
   const fetchStudents = async () => {
     if (!subject) return;
+    
+    // PREVENT SAVING PRACTICALS AS "ALL BATCHES"
+    if (subject.includes('_PRACTICAL') && batch.toLowerCase() === 'all') {
+        alert("Please select a specific batch (e.g. Batch A) for Practical attendance.");
+        return;
+    }
+
     setLoading(true);
     try {
       const url = `${API_BASE_URL}/students?batch=${batch}&subject_id=${subject}`;
@@ -743,7 +775,11 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
         </select>
 
         <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
-          {allowedBatches.map(b => <option key={b} value={b}>{b.toLowerCase() === 'all' ? 'All Batches' : `Batch ${b}`}</option>)}
+          {allowedBatches.map(b => (
+            <option key={b} value={b}>
+              {b.toLowerCase() === 'all' ? 'All Batches' : (b.toLowerCase().includes('batch') ? b.replace('_', ' ') : `Batch ${b}`)}
+            </option>
+          ))}
         </select>
 
         <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
