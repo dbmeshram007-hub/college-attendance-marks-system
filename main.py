@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from typing import List, Optional
 import re
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import Student, Faculty, Subject, FacultyAllocation
 from app.routers import attendance, marks, reports
-from pydantic import BaseModel
 
 # 1. Create the App
 app = FastAPI(title="College Attendance & Marks API")
@@ -51,9 +51,12 @@ def get_students(
     db: Session = Depends(get_db)
 ):
     base_stmt = select(Student)
-    if batch and batch.strip() != "" and batch.strip() != "All":
+    
+    # SMART BATCH FILTERING: Extracts "A" out of "Batch_A" or "Batch A"
+    if batch and batch.strip() != "" and batch.strip().lower() != "all":
         batch_val = batch.strip()
-        base_stmt = base_stmt.where(Student.batch_group.contains(batch_val))
+        clean_batch = batch_val.split("_")[-1] if "_" in batch_val else batch_val.replace("Batch ", "").replace("Batch", "").strip()
+        base_stmt = base_stmt.where(Student.batch_group.contains(clean_batch))
 
     if not subject_id or subject_id.strip() == "":
         return db.exec(base_stmt).all()
@@ -66,18 +69,20 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        # FIX: Check for exact "M. PHARM" or "M.PHARM" (Ignoring case)
-        prog_upper = subject.program.upper().replace(" ", "")
-        if "M.PHARM" in prog_upper:
+        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
             is_m_pharm = True
-        else:
-            is_m_pharm = False
     else:
-        # Fallback detection
-        if search_code.startswith("MP"):
-            is_m_pharm = True
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
+        match = re.search(r'[A-Z]+(\d)\d{2}', clean_code)
+        if match:
+            target_semester = int(match.group(1))
         else:
-            is_m_pharm = False
+            digits = re.findall(r'\d', clean_code)
+            if digits:
+                target_semester = int(digits[0])
+                
+        if search_code.startswith("MP") or search_code.startswith("M."):
+            is_m_pharm = True
 
     stmt = base_stmt
     if target_semester:
@@ -86,15 +91,15 @@ def get_students(
     if is_m_pharm:
         stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
     else:
-        # Ensure we filter for B. Pharm and NOT M. Pharm
         stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
         
     students = db.exec(stmt).all()
-   
+    
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
-        if batch and batch.strip() != "" and batch.strip() != "All":
-            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(batch.strip()))
+        if batch and batch.strip() != "" and batch.strip().lower() != "all":
+            clean_batch = batch.strip().split("_")[-1] if "_" in batch.strip() else batch.strip().replace("Batch ", "").replace("Batch", "").strip()
+            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(clean_batch))
         students = db.exec(fallback_stmt).all()
         
     return students
