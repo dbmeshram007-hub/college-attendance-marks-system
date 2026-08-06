@@ -3,12 +3,12 @@ import Reports from './Reports';
 import MarksEntry from './MarksEntry';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 
-const API_BASE_URL = 'https://college-backend-007.onrender.com/api'; // Make sure this matches your live backend!
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 
 export default function CollegeDashboard() {
-  const [activeTab, setActiveTab] = useState('overview'); 
-  const [currentUser, setCurrentUser] = useState(null); 
-  const [loginMode, setLoginMode] = useState('admin'); 
+  const [activeTab, setActiveTab] = useState('overview');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginMode, setLoginMode] = useState('admin');
   const [loginInput, setLoginInput] = useState({ id: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
@@ -394,7 +394,6 @@ export default function CollegeDashboard() {
         ))}
       </div>
 
-      {}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
           <p>Loading your cloud database...</p>
@@ -463,7 +462,6 @@ function OverviewDashboard({ currentUser }) {
 
   return (
     <div>
-      {/* STAT CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ fontSize: '32px' }}>🎓</div>
@@ -488,7 +486,6 @@ function OverviewDashboard({ currentUser }) {
         </div>
       </div>
 
-      {/* BAR CHART */}
       <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#0f172a' }}>Subject Attendance Performance (%)</h3>
         {data.chartData.length > 0 ? (
@@ -571,14 +568,11 @@ function AdminEditAttendance({ subjects = [] }) {
     finally { setLoading(false); }
   };
 
-  // DELETE FUNCTION
   const handleDeleteSession = async () => {
     if (!subject || !date) return alert("Missing data.");
-    
     const confirmDelete = window.confirm(
       `⚠️ DANGER: Are you sure you want to completely DELETE Lecture ${lectureSeq} for ${subject} on ${date}?\n\nThis will remove it from all reports. This action cannot be undone.`
     );
-    
     if (!confirmDelete) return;
 
     setLoading(true);
@@ -587,10 +581,9 @@ function AdminEditAttendance({ subjects = [] }) {
         method: 'DELETE'
       });
       const resData = await res.json();
-      
       if (res.ok) {
         alert(`🗑️ ${resData.message}`);
-        setStudents([]); // Clear the table from the screen
+        setStudents([]);
         setAttendance({});
       } else {
         alert(resData.detail || "Failed to delete.");
@@ -607,33 +600,24 @@ function AdminEditAttendance({ subjects = [] }) {
       </div>
       
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#fef2f2', padding: '16px', borderRadius: '8px' }}>
-        
         <input 
           type="date" 
           value={date} 
           onChange={e => setDate(e.target.value)} 
           style={{ padding: '10px', borderRadius: '6px', border: '1px solid #fca5a5', fontWeight: 'bold', color: '#991b1b' }}
         />
-
         <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '200px' }}>
           <option value="">-- Select Subject --</option>
           {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
         </select>
-
         <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-          {['All', 'A', 'B', 'C', 'D', 'E'].map(b => (
-            <option key={b} value={b}>
-              {b.toLowerCase() === 'all' ? 'All Batches' : (b.toLowerCase().includes('batch') ? b.replace('_', ' ') : `Batch ${b}`)}
-            </option>
-          ))}
+          {['All', 'A', 'B', 'C', 'D', 'E'].map(b => <option key={b} value={b}>{b === 'All' ? 'All Batches' : `Batch ${b}`}</option>)}
         </select>
-
         <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
           <option value={1}>Lecture 1</option>
           <option value={2}>Lecture 2</option>
           <option value={3}>Lecture 3</option>
         </select>
-        
         <button onClick={fetchStudentsAndRecords} disabled={loading || !subject} style={{ padding: '10px 20px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
           {loading ? 'Searching...' : 'Pull Past Records'}
         </button>
@@ -688,6 +672,8 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   const [lectureSeq, setLectureSeq] = useState(1);
   const [loading, setLoading] = useState(false);
 
+  const isPractical = subject.includes('_PRACTICAL');
+
   let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E']; 
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
@@ -696,33 +682,24 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     }
   }
 
-  // SMART EFFECT: Force batch selection if it's a practical
   useEffect(() => {
     if (subject && !subjects.find(s => s.subject_code === subject)) {
       setSubject('');
       setStudents([]);
     }
     
-    // If they select a PRACTICAL subject, default the batch to 'A' instead of 'All'
-    if (subject && subject.includes('_PRACTICAL')) {
-      if (batch.toLowerCase() === 'all' || !allowedBatches.includes(batch)) {
-          const firstRealBatch = allowedBatches.find(b => b.toLowerCase() !== 'all') || 'A';
-          setBatch(firstRealBatch);
+    if (!isPractical) {
+      setBatch('All');
+    } else {
+      if (!allowedBatches.includes(batch) || batch.toLowerCase() === 'all') {
+        const firstRealBatch = allowedBatches.find(b => b.toLowerCase() !== 'all') || 'A';
+        setBatch(firstRealBatch);
       }
-    } else if (subject && !allowedBatches.includes(batch) && allowedBatches.length > 0) {
-      setBatch(allowedBatches[0]);
     }
-  }, [subjects, subject, activeFaculty, batch, allowedBatches]);
+  }, [subjects, subject, activeFaculty, batch, allowedBatches, isPractical]);
 
   const fetchStudents = async () => {
     if (!subject) return;
-    
-    // PREVENT SAVING PRACTICALS AS "ALL BATCHES"
-    if (subject.includes('_PRACTICAL') && batch.toLowerCase() === 'all') {
-        alert("Please select a specific batch (e.g. Batch A) for Practical attendance.");
-        return;
-    }
-
     setLoading(true);
     try {
       const url = `${API_BASE_URL}/students?batch=${batch}&subject_id=${subject}`;
@@ -767,20 +744,22 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
     <div style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
       <h2 style={{ marginTop: 0, color: '#0f172a' }}>Daily Attendance Entry</h2>
       
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         
-        <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '200px', backgroundColor: 'white' }}>
+        <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, minWidth: '220px', backgroundColor: 'white' }}>
           <option value="">-- Select Your Allocated Subject --</option>
           {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
         </select>
 
-        <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
-          {allowedBatches.map(b => (
-            <option key={b} value={b}>
-              {b.toLowerCase() === 'all' ? 'All Batches' : (b.toLowerCase().includes('batch') ? b.replace('_', ' ') : `Batch ${b}`)}
-            </option>
-          ))}
-        </select>
+        {isPractical ? (
+          <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontWeight: 'bold', color: '#2563eb' }}>
+            {allowedBatches.filter(b => b.toLowerCase() !== 'all').map(b => <option key={b} value={b}>Batch {b}</option>)}
+          </select>
+        ) : (
+          <div style={{ padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#64748b', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            👥 All Batches (Theory)
+          </div>
+        )}
 
         <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
           <option value={1}>Lecture 1</option>
@@ -822,10 +801,10 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
           <div style={{ marginTop: '20px', textAlign: 'right' }}>
              <button onClick={handleSave} disabled={loading} style={{ padding: '12px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
                 {loading ? 'Saving...' : 'Save Attendance'}
-             </button>
+              </button>
           </div>
         </>
-      ) : <p style={{ color: '#64748b', fontStyle: 'italic' }}>No students currently loaded. Select an allocated subject and batch, then click "Load Students".</p>}
+      ) : <p style={{ color: '#64748b', fontStyle: 'italic' }}>No students currently loaded. Select an allocated subject and click "Load Students".</p>}
     </div>
   );
 }
