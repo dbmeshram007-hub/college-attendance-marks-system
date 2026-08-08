@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List
-from datetime import date
+from datetime import date, datetime
 from sqlmodel import Session, select
 from app.database import get_db
 from app.models import Attendance, Subject
 import re
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
+
+# STIPULATED DEADLINE: Backfilling past attendance is allowed only until this date
+BACKFILL_DEADLINE = date(2026, 9, 1)
 
 class StudentRecord(BaseModel):
     student_id: str
@@ -18,13 +21,13 @@ class SubmitAttendancePayload(BaseModel):
     date: date
     lecture_sequence: int = 1
     records: List[StudentRecord]
+    is_faculty_backfill: bool = False
 
 @router.post("/submit")
 def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(get_db)):
     search_code = payload.subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
-    # Bulletproof fallback allowing underscores for Theory/Practical split
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
         match = re.search(r'([A-Z]+)(\d{3})', clean_code)
@@ -38,8 +41,17 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
     if not subject:
         raise HTTPException(status_code=404, detail=f"Subject '{payload.subject_id}' not found.")
 
+    # TIME-BOUND CHECK FOR FACULTY BACKFILLING
+    today = datetime.now().date()
+    if payload.date < today:
+        if payload.is_faculty_backfill:
+            if today > BACKFILL_DEADLINE:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"⚠️ Backfill window has expired! The deadline to enter past attendance was {BACKFILL_DEADLINE.strftime('%d-%b-%Y')}."
+                )
+
     for rec in payload.records:
-        # 1. CHECK IF RECORD ALREADY EXISTS
         stmt = select(Attendance).where(
             Attendance.student_id == rec.student_id,
             Attendance.subject_id == search_code,
@@ -49,10 +61,8 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
         existing = db.exec(stmt).first()
 
         if existing:
-            # UPDATE existing record (Prevents 200% duplication)
             existing.status = rec.status
         else:
-            # ADD new record
             entry = Attendance(
                 student_id=rec.student_id,
                 subject_id=search_code,
@@ -65,15 +75,9 @@ def submit_attendance(payload: SubmitAttendancePayload, db: Session = Depends(ge
     db.commit()
     return {"message": "Attendance saved successfully"}
 
-
-# ---------------------------------------------------------
-# FETCH PAST ATTENDANCE (For Admin Editing)
-# ---------------------------------------------------------
 @router.get("/records")
 def get_attendance_records(subject_id: str, target_date: date, lecture_sequence: int = 1, db: Session = Depends(get_db)):
     search_code = subject_id.strip().upper()
-    
-    # Bulletproof fallback allowing underscores for Theory/Practical split
     subject = db.get(Subject, search_code)
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
@@ -93,10 +97,6 @@ def get_attendance_records(subject_id: str, target_date: date, lecture_sequence:
     
     return {r.student_id: r.status for r in records}
 
-
-# ---------------------------------------------------------
-# DELETE PAST ATTENDANCE SESSION (Admin Only)
-# ---------------------------------------------------------
 @router.delete("/session")
 def delete_attendance_session(
     subject_id: str, 
@@ -105,8 +105,6 @@ def delete_attendance_session(
     db: Session = Depends(get_db)
 ):
     search_code = subject_id.strip().upper()
-    
-    # Bulletproof fallback allowing underscores for Theory/Practical split
     subject = db.get(Subject, search_code)
     if not subject:
         clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
@@ -118,7 +116,6 @@ def delete_attendance_session(
             if subject:
                 search_code = subject.subject_code
 
-    # Find all records for this exact day, subject, and lecture number
     records = db.exec(select(Attendance).where(
         Attendance.subject_id == search_code,
         Attendance.date == target_date,

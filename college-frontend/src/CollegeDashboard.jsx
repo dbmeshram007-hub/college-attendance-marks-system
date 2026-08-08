@@ -311,8 +311,8 @@ export default function CollegeDashboard() {
   }
 
   const availableTabs = currentUser.role === 'faculty'
-    ? ['overview', 'attendance', 'marks', 'reports']
-    : ['overview', 'attendance', 'edit_attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
+    ? ['overview', 'attendance', 'backfill', 'marks', 'reports']
+    : ['overview', 'attendance', 'backfill', 'edit_attendance', 'marks', 'reports', 'students', 'faculty', 'subjects', 'allocations'];
 
   return (
     <div style={{ maxWidth: '1100px', margin: '2rem auto', fontFamily: "'Inter', sans-serif", padding: '0 1rem' }}>
@@ -414,6 +414,13 @@ export default function CollegeDashboard() {
               allocations={data.allocations} 
             />
           )}
+          {activeTab === 'backfill' && (
+            <FacultyBackfillAttendance 
+              subjects={currentUser.role === 'faculty' ? filteredSubjects : data.subjects} 
+              allocations={data.allocations}
+              activeFaculty={activeFacultyId}
+            />
+          )}
           {activeTab === 'edit_attendance' && (
             <AdminEditAttendance subjects={data.subjects} />
           )}
@@ -511,6 +518,168 @@ function OverviewDashboard({ currentUser }) {
           <p style={{ color: '#64748b', fontStyle: 'italic' }}>Not enough attendance data collected yet to build charts.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function FacultyBackfillAttendance({ subjects = [], allocations = [], activeFaculty }) {
+  const [subject, setSubject] = useState('');
+  const [batch, setBatch] = useState('All');
+  const [lectureSeq, setLectureSeq] = useState(1);
+  const [date, setDate] = useState('');
+  
+  const [students, setStudents] = useState([]);
+  const [attendance, setAttendance] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const isPractical = subject.includes('_PRACTICAL');
+
+  let allowedBatches = ['All', 'A', 'B', 'C', 'D', 'E']; 
+  if (activeFaculty && subject) {
+    const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
+    if (myAllocs.length > 0 && !myAllocs.some(a => a.batch_group.toLowerCase() === 'all')) {
+      allowedBatches = myAllocs.map(a => a.batch_group);
+    }
+  }
+
+  const fetchStudents = async () => {
+    if (!subject || !date) return alert("Select a subject and past date.");
+    setLoading(true);
+    try {
+      const url = `${API_BASE_URL}/students?batch=${batch}&subject_id=${subject}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      setStudents(Array.isArray(data) ? data : []);
+      const initial = {};
+      (Array.isArray(data) ? data : []).forEach(s => initial[s.student_id] = 'Present');
+      setAttendance(initial);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  const handleSaveBackfill = async () => {
+    if (!subject || !date) return alert("Missing required fields.");
+    setLoading(true);
+
+    const payload = {
+      subject_id: subject,
+      date: date,
+      lecture_sequence: lectureSeq,
+      records: Object.entries(attendance).map(([student_id, status]) => ({ student_id, status })),
+      is_faculty_backfill: true
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/attendance/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        alert("🎉 Past lecture attendance successfully recorded!");
+      } else {
+        alert(resData.detail || "Failed to submit backfill attendance.");
+      }
+    } catch (e) {
+      alert("Error connecting to server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '24px', background: '#fff', borderRadius: '12px', border: '1px solid #93c5fd', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+        <span style={{ fontSize: '24px' }}>⏳</span>
+        <h2 style={{ margin: 0, color: '#1e40af' }}>Backfill Past Lecture Attendance</h2>
+      </div>
+      <p style={{ color: '#64748b', fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
+        Use this tab to log lectures conducted prior to the app's launch. <strong>Deadline: September 1, 2026.</strong>
+      </p>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', alignItems: 'center' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#1e40af', marginBottom: '4px' }}>Past Lecture Date</label>
+          <input 
+            type="date" 
+            value={date} 
+            max={new Date().toISOString().split('T')[0]}
+            onChange={e => setDate(e.target.value)} 
+            style={{ padding: '9px', borderRadius: '6px', border: '1px solid #93c5fd', fontWeight: 'bold', color: '#1e3a8a', backgroundColor: 'white' }}
+          />
+        </div>
+
+        <div style={{ flex: 1, minWidth: '220px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#1e40af', marginBottom: '4px' }}>Allocated Subject</label>
+          <select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
+            <option value="">-- Select Subject --</option>
+            {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#1e40af', marginBottom: '4px' }}>Batch / Lecture</label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {isPractical ? (
+              <select value={batch} onChange={e => setBatch(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontWeight: 'bold', color: '#2563eb' }}>
+                {allowedBatches.filter(b => b.toLowerCase() !== 'all').map(b => <option key={b} value={b}>Batch {b}</option>)}
+              </select>
+            ) : (
+              <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#64748b', fontSize: '13px', display: 'flex', alignItems: 'center' }}>
+                👥 Theory (All)
+              </div>
+            )}
+            <select value={lectureSeq} onChange={e => setLectureSeq(Number(e.target.value))} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
+              <option value={1}>Lecture 1</option>
+              <option value={2}>Lecture 2</option>
+              <option value={3}>Lecture 3</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ alignSelf: 'flex-end' }}>
+          <button onClick={fetchStudents} disabled={loading || !subject || !date} style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Loading...' : 'Load Students'}
+          </button>
+        </div>
+      </div>
+
+      {students.length > 0 ? (
+        <>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ padding: '12px 8px', textAlign: 'left' }}>Student Name</th>
+                <th style={{ padding: '12px 8px', textAlign: 'center' }}>Status for {date}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map(s => (
+                <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '12px 8px', fontWeight: '500' }}>{s.full_name} <br/><span style={{ fontSize: '0.8em', color: '#64748b' }}>{s.student_id}</span></td>
+                  <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                    <button 
+                      onClick={() => setAttendance({ ...attendance, [s.student_id]: attendance[s.student_id] === 'Present' ? 'Absent' : 'Present' })}
+                      style={{ 
+                        background: attendance[s.student_id] === 'Present' ? '#22c55e' : '#ef4444', 
+                        color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', width: '100px' 
+                      }}>
+                      {attendance[s.student_id]}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: '20px', textAlign: 'right' }}>
+             <button onClick={handleSaveBackfill} disabled={loading} style={{ padding: '12px 24px', background: '#1e40af', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
+                {loading ? 'Submitting...' : 'Save Backfill Attendance'}
+             </button>
+          </div>
+        </>
+      ) : <p style={{ color: '#64748b', fontStyle: 'italic' }}>Select a past date, allocated subject, and click "Load Students" to begin backfilling.</p>}
     </div>
   );
 }
