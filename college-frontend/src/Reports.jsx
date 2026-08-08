@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const API_BASE_URL = '[https://college-backend-007.onrender.com/api](https://college-backend-007.onrender.com/api)';
+const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
 
 export default function Reports({ subjects = [], currentUser }) {
   const [activeReport, setActiveReport] = useState('attendance');
@@ -44,10 +44,11 @@ export default function Reports({ subjects = [], currentUser }) {
         )}
       </div>
 
-      {activeReport === 'attendance' && <AttendanceReport subjects="{subjects}"/>}
-      {activeReport === 'subject_marks' && <SubjectMarksReport subjects="{subjects}"/>}
-      {activeReport === 'marks' && isAdmin && <MarksReport/>}
-      {activeReport === 'compiled_attendance' && isAdmin && <CompiledAttendanceReport/>}
+      {/* FIXED: Removed the quotes around {subjects} */}
+      {activeReport === 'attendance' && <AttendanceReport subjects={subjects} />}
+      {activeReport === 'subject_marks' && <SubjectMarksReport subjects={subjects} />}
+      {activeReport === 'marks' && isAdmin && <MarksReport />}
+      {activeReport === 'compiled_attendance' && isAdmin && <CompiledAttendanceReport />}
     </div>
   );
 }
