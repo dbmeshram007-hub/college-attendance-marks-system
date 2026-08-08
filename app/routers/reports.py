@@ -8,14 +8,7 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
-# ---------------------------------------------------------
-# 1. COMPILED ATTENDANCE REPORT (SMART BATCH MATH)
-# ---------------------------------------------------------
-@router.get("/attendance/compiled")
-def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
-    is_m_pharm = program.upper().strip().startswith("M")
-    
-    all_subjects = db.exec(select(Subject)).all()
+def get_filtered_semester_subjects(all_subjects, semester, is_m_pharm):
     subjects = []
     for sub in all_subjects:
         code = (sub.subject_code or "").upper().strip()
@@ -33,6 +26,26 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
             
         if sem == semester and sub_is_m == is_m_pharm:
             subjects.append(sub)
+            
+    # SMART FILTER: If base code has suffixed variants (_THEORY / _PRACTICAL), exclude the raw base code
+    all_codes = {s.subject_code for s in subjects}
+    filtered = []
+    for sub in subjects:
+        code = sub.subject_code
+        has_variants = any(v.startswith(code + "_") or v.startswith(code + "-") for v in all_codes if v != code)
+        if has_variants:
+            continue
+        filtered.append(sub)
+    return filtered
+
+# ---------------------------------------------------------
+# 1. COMPILED ATTENDANCE REPORT (SMART BATCH MATH)
+# ---------------------------------------------------------
+@router.get("/attendance/compiled")
+def get_compiled_attendance(program: str, semester: int, db: Session = Depends(get_db)):
+    is_m_pharm = program.upper().strip().startswith("M")
+    all_subjects = db.exec(select(Subject)).all()
+    subjects = get_filtered_semester_subjects(all_subjects, semester, is_m_pharm)
             
     if not subjects:
         return {"program": program, "semester": semester, "subjects": [], "students": []}
@@ -54,7 +67,6 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
     
     records = db.exec(select(Attendance).where(Attendance.subject_id.in_(sub_codes))).all()
     
-    # MAGIC FIX: Calculate total possible classes PER STUDENT, not globally
     student_total_classes = {}
     student_attended = {}
     
@@ -100,25 +112,8 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
     is_m_pharm = program.upper().strip().startswith("M")
-    
     all_subjects = db.exec(select(Subject)).all()
-    subjects = []
-    for sub in all_subjects:
-        code = (sub.subject_code or "").upper().strip()
-        sem = 0
-        try: sem = int(sub.semester) if sub.semester else 0
-        except: pass
-        if sem == 0:
-            match = re.search(r'[A-Z]+(\d)\d{2}', code)
-            if match: sem = int(match.group(1))
-        
-        sub_is_m = False
-        sub_prog = (sub.program or "").upper().replace(" ", "")
-        if sub_prog.startswith("M"): sub_is_m = True
-        elif code.startswith("MP") or code.startswith("M."): sub_is_m = True
-            
-        if sem == semester and sub_is_m == is_m_pharm:
-            subjects.append(sub)
+    subjects = get_filtered_semester_subjects(all_subjects, semester, is_m_pharm)
             
     if not subjects:
         return {"program": program, "semester": semester, "examName": exam_name, "subjects": [], "students": []}
@@ -176,7 +171,7 @@ def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session 
     return {"program": program, "semester": semester, "examName": exam_name, "subjects": subject_dicts, "students": result}
 
 # ---------------------------------------------------------
-# 3. SINGLE SUBJECT ATTENDANCE REPORT (SMART BATCH MATH)
+# 3. SINGLE SUBJECT ATTENDANCE REPORT
 # ---------------------------------------------------------
 @router.get("/attendance/{subject_id}")
 def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
@@ -248,7 +243,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         s_map = student_attendance_map.get(s.student_id, {})
         daily_status = []
         attended = 0
-        applicable_classes = 0 # MAGIC FIX: Only count days this specific student was marked P or A
+        applicable_classes = 0
         
         for sess in sorted_sessions:
             status = s_map.get(sess, "-")
@@ -263,7 +258,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         
         result.append({
             "student_id": s.student_id,
-            "name": s.full_name,
+            "name": s.name if hasattr(s, 'name') else s.full_name,
             "daily_status": daily_status,
             "attended": attended,
             "percentage": round(min(perc, 100), 2)
@@ -277,7 +272,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     }
 
 # ---------------------------------------------------------
-# 4. DASHBOARD ANALYTICS (Charts & Stats)
+# 4. DASHBOARD ANALYTICS
 # ---------------------------------------------------------
 @router.get("/analytics/dashboard")
 def get_dashboard_analytics(faculty_id: str = None, db: Session = Depends(get_db)):
@@ -306,7 +301,6 @@ def get_dashboard_analytics(faculty_id: str = None, db: Session = Depends(get_db
         if total_unique_classes == 0:
             continue
             
-        # The Dashboard is already smart! It uses absolute P vs A counts.
         present_count = sum(1 for r in records if r.status.lower() == 'present')
         absent_count = sum(1 for r in records if r.status.lower() == 'absent')
         total_marks = present_count + absent_count
