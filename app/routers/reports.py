@@ -107,7 +107,7 @@ def get_compiled_attendance(program: str, semester: int, db: Session = Depends(g
     return {"program": program, "semester": semester, "subjects": subject_dicts, "students": result_list}
 
 # ---------------------------------------------------------
-# 2. COMPILED MARKS REPORT
+# 2. COMPILED MARKS REPORT (ADMIN ONLY)
 # ---------------------------------------------------------
 @router.get("/marks/compiled")
 def get_compiled_marks(program: str, semester: int, exam_name: str, db: Session = Depends(get_db)):
@@ -258,7 +258,7 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
         
         result.append({
             "student_id": s.student_id,
-            "name": s.name if hasattr(s, 'name') else s.full_name,
+            "name": s.full_name,
             "daily_status": daily_status,
             "attended": attended,
             "percentage": round(min(perc, 100), 2)
@@ -272,7 +272,86 @@ def get_attendance_report(subject_id: str, db: Session = Depends(get_db)):
     }
 
 # ---------------------------------------------------------
-# 4. DASHBOARD ANALYTICS
+# 4. SINGLE SUBJECT MARKS REPORT (NEW FOR FACULTY)
+# ---------------------------------------------------------
+@router.get("/marks/{subject_id}")
+def get_subject_marks_report(subject_id: str, exam_name: str, db: Session = Depends(get_db)):
+    search_code = subject_id.strip().upper()
+    subject = db.get(Subject, search_code)
+    
+    if not subject:
+        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
+        match = re.search(r'([A-Z]+)(\d{3})', clean_code)
+        if match:
+            alpha = match.group(1)
+            num = match.group(2)
+            subject = db.exec(select(Subject).where(Subject.subject_code.ilike(f"%{alpha}%{num}%"))).first()
+            
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found in database")
+
+    target_semester = 0
+    try: target_semester = int(subject.semester) if subject.semester else 0
+    except: pass
+    if target_semester == 0:
+        match = re.search(r'[A-Z]+(\d)\d{2}', subject.subject_code.upper())
+        if match: target_semester = int(match.group(1))
+
+    is_m_pharm = False
+    sub_prog = (subject.program or "").upper().replace(" ", "")
+    if sub_prog.startswith("M"): is_m_pharm = True
+    elif search_code.startswith("MP") or search_code.startswith("M."): is_m_pharm = True
+            
+    all_students = db.exec(select(Student)).all()
+    students = []
+    for stu in all_students:
+        sem = 0
+        try: sem = int(stu.semester) if stu.semester else 0
+        except: pass
+        stu_is_m = False
+        stu_prog = (stu.program or "").upper().replace(" ", "")
+        if stu_prog.startswith("M"): stu_is_m = True
+        if sem == target_semester and stu_is_m == is_m_pharm:
+            students.append(stu)
+    
+    exam = db.exec(select(InternalExam).where(
+        InternalExam.subject_id == subject.subject_code,
+        InternalExam.exam_name == exam_name
+    )).first()
+    
+    student_marks = {}
+    if exam:
+        marks = db.exec(select(ExamMark).where(ExamMark.exam_id == exam.id)).all()
+        for m in marks:
+            student_marks[m.student_id] = m
+
+    result = []
+    for s in students:
+        m = student_marks.get(s.student_id)
+        mark_val = "-"
+        if m:
+            if m.is_absent:
+                mark_val = "ABS"
+            elif m.marks_obtained is not None:
+                mark_val = m.marks_obtained
+                
+        result.append({
+            "student_id": s.student_id,
+            "name": s.full_name,
+            "mark": mark_val
+        })
+        
+    return {
+        "subject": subject.subject_name,
+        "subject_code": subject.subject_code,
+        "exam_name": exam_name,
+        "max_marks": exam.max_marks if exam else "-",
+        "status": exam.status if exam else "Not Created",
+        "students": sorted(result, key=lambda x: x['name'])
+    }
+
+# ---------------------------------------------------------
+# 5. DASHBOARD ANALYTICS
 # ---------------------------------------------------------
 @router.get("/analytics/dashboard")
 def get_dashboard_analytics(faculty_id: str = None, db: Session = Depends(get_db)):

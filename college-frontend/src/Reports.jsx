@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const API_BASE_URL = 'https://college-backend-007.onrender.com/api';
+const API_BASE_URL = '[https://college-backend-007.onrender.com/api](https://college-backend-007.onrender.com/api)';
 
 export default function Reports({ subjects = [], currentUser }) {
   const [activeReport, setActiveReport] = useState('attendance');
@@ -20,24 +20,34 @@ export default function Reports({ subjects = [], currentUser }) {
           Subject Attendance %
         </button>
         <button 
-          onClick={() => setActiveReport('marks')} 
-          style={{ padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', border: 'none', background: activeReport === 'marks' ? '#e0e7ff' : 'transparent', color: activeReport === 'marks' ? '#2563eb' : '#64748b', borderRadius: '6px' }}
+          onClick={() => setActiveReport('subject_marks')} 
+          style={{ padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', border: 'none', background: activeReport === 'subject_marks' ? '#e0e7ff' : 'transparent', color: activeReport === 'subject_marks' ? '#2563eb' : '#64748b', borderRadius: '6px' }}
         >
-          Compiled Semester Marks (Ranking)
+          Subject Marks
         </button>
+        
         {isAdmin && (
-          <button 
-            onClick={() => setActiveReport('compiled_attendance')} 
-            style={{ padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid', borderColor: activeReport === 'compiled_attendance' ? '#fca5a5' : '#e2e8f0', background: activeReport === 'compiled_attendance' ? '#fef2f2' : '#f8fafc', color: activeReport === 'compiled_attendance' ? '#dc2626' : '#64748b', borderRadius: '6px' }}
-          >
-            👑 Admin: Compiled Semester Attendance
-          </button>
+          <>
+            <button 
+              onClick={() => setActiveReport('marks')} 
+              style={{ padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid', borderColor: activeReport === 'marks' ? '#fca5a5' : '#e2e8f0', background: activeReport === 'marks' ? '#fef2f2' : '#f8fafc', color: activeReport === 'marks' ? '#dc2626' : '#64748b', borderRadius: '6px', marginLeft: 'auto' }}
+            >
+              👑 Admin: Compiled Semester Marks
+            </button>
+            <button 
+              onClick={() => setActiveReport('compiled_attendance')} 
+              style={{ padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid', borderColor: activeReport === 'compiled_attendance' ? '#fca5a5' : '#e2e8f0', background: activeReport === 'compiled_attendance' ? '#fef2f2' : '#f8fafc', color: activeReport === 'compiled_attendance' ? '#dc2626' : '#64748b', borderRadius: '6px' }}
+            >
+              👑 Admin: Compiled Semester Attendance
+            </button>
+          </>
         )}
       </div>
 
-      {activeReport === 'attendance' ? <AttendanceReport subjects={subjects} /> : 
-       activeReport === 'marks' ? <MarksReport /> : 
-       <CompiledAttendanceReport />}
+      {activeReport === 'attendance' && <AttendanceReport subjects="{subjects}"/>}
+      {activeReport === 'subject_marks' && <SubjectMarksReport subjects="{subjects}"/>}
+      {activeReport === 'marks' && isAdmin && <MarksReport/>}
+      {activeReport === 'compiled_attendance' && isAdmin && <CompiledAttendanceReport/>}
     </div>
   );
 }
@@ -60,7 +70,7 @@ function AttendanceReport({ subjects }) {
 
   const downloadPDF = () => {
     if (!data) return;
-    const doc = new jsPDF('landscape'); // Landscape to fit the wide grid
+    const doc = new jsPDF('landscape'); 
     const currentDate = new Date().toLocaleDateString();
     
     doc.setFontSize(16);
@@ -135,6 +145,108 @@ function AttendanceReport({ subjects }) {
                     ))}
                     <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#f8fafc' }}>{s.attended}</td>
                     <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#f8fafc', color: s.percentage < 75 ? '#ef4444' : '#16a34a' }}>{s.percentage}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubjectMarksReport({ subjects }) {
+  const [subject, setSubject] = useState('');
+  const [examName, setExamName] = useState('Sessional 1');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const generateReport = async () => {
+    if (!subject) return alert("Select a subject first.");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/reports/marks/${subject}?exam_name=${encodeURIComponent(examName)}`);
+      if (!res.ok) throw new Error("Report failed");
+      setData(await res.json());
+    } catch (e) { alert("Error generating report."); }
+    finally { setLoading(false); }
+  };
+
+  const downloadPDF = () => {
+    if (!data) return;
+    const doc = new jsPDF('p', 'pt'); 
+    const currentDate = new Date().toLocaleDateString();
+
+    doc.setFontSize(16);
+    doc.text(`Subject Marks Report: ${data.subject_code}`, 14, 25);
+    doc.setFontSize(10);
+    doc.text(`Subject: ${data.subject}  |  Exam: ${data.exam_name}  |  Max Marks: ${data.max_marks}`, 14, 40);
+    doc.text(`Status: ${data.status}  |  Generated on: ${currentDate}`, 14, 55);
+
+    const tableColumn = ["Enrollment No.", "Student Name", `Marks (out of ${data.max_marks})`];
+    const tableRows = data.students.map(s => [
+        s.student_id,
+        s.name,
+        s.mark
+    ]);
+
+    autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 65,
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [37, 99, 235] },
+        columnStyles: { 2: { halign: 'center', fontStyle: 'bold' } }
+    });
+
+    doc.save(`${data.subject_code}_${data.exam_name}_Marks.pdf`);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <select value={subject} onChange={e => setSubject(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1, maxWidth: '300px' }}>
+          <option value="">-- Select Subject --</option>
+          {subjects.map(s => <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>)}
+        </select>
+        <select value={examName} onChange={e => setExamName(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          <option value="Sessional 1">Sessional 1</option>
+          <option value="Sessional 2">Sessional 2</option>
+          <option value="Practical">Practical</option>
+          <option value="End Semester">End Semester</option>
+        </select>
+
+        <button onClick={generateReport} disabled={loading} style={{ padding: '10px 20px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          {loading ? 'Generating...' : 'View Marks'}
+        </button>
+      </div>
+
+      {data && (
+        <div style={{ animation: 'fadeIn 0.3s' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+            <p style={{ margin: 0, fontWeight: 'bold', color: '#475569' }}>
+              Exam Status: <span style={{ color: data.status === 'Published' ? '#16a34a' : '#ea580c' }}>{data.status}</span>
+            </p>
+            <button onClick={downloadPDF} style={{ padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>📄 Export to PDF</button>
+          </div>
+          <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                <tr>
+                  <th style={{ padding: '10px', textAlign: 'left', width: '25%' }}>Enrollment No.</th>
+                  <th style={{ padding: '10px', textAlign: 'left', width: '50%' }}>Student Name</th>
+                  <th style={{ padding: '10px', textAlign: 'center', backgroundColor: '#f1f5f9', width: '25%' }}>Marks (out of {data.max_marks})</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.students.map(s => (
+                  <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px', color: '#64748b' }}>{s.student_id}</td>
+                    <td style={{ padding: '10px', fontWeight: '500' }}>{s.name}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#f8fafc', color: s.mark === 'ABS' ? '#ef4444' : '#1e293b' }}>
+                      {s.mark}
+                    </td>
                   </tr>
                 ))}
               </tbody>
