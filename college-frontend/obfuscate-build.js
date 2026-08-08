@@ -6,7 +6,7 @@ const buildFolder = path.join(__dirname, 'build', 'static', 'js');
 
 function obfuscateFolder(dir) {
     if (!fs.existsSync(dir)) {
-        console.log(`❌ Build folder not found at ${dir}. Run 'npm run build' first.`);
+        console.log(`❌ Build folder not found at ${dir}.`);
         return;
     }
 
@@ -15,31 +15,29 @@ function obfuscateFolder(dir) {
         if (fs.statSync(filePath).isDirectory()) {
             obfuscateFolder(filePath);
         } else if (file.endsWith('.js')) {
-            console.log(`🔒 Scrambling: ${file}...`);
+            console.log(`🔒 Safely obfuscating: ${file}...`);
             const code = fs.readFileSync(filePath, 'utf8');
             
             const obfuscatedCode = JavaScriptObfuscator.obfuscate(code, {
                 compact: true,
-                controlFlowFlattening: true,
-                controlFlowFlatteningThreshold: 0.75,
-                deadCodeInjection: true,
-                deadCodeInjectionThreshold: 0.4,
+                controlFlowFlattening: false, // Disabled to prevent breaking library internals
+                deadCodeInjection: false,     // Disabled for stability
                 identifierNamesGenerator: 'hexadecimal',
                 renameGlobals: false,
                 rotateStringArray: true,
-                selfDefending: true,
+                selfDefending: false,         // Disabled to prevent browser console conflicts
                 stringArray: true,
                 stringArrayEncoding: ['base64'],
-                stringArrayThreshold: 0.8,
+                stringArrayThreshold: 0.75,
                 unicodeEscapeSequence: false
             }).getObfuscatedCode();
 
             fs.writeFileSync(filePath, obfuscatedCode, 'utf8');
-            console.log(`✅ Successfully scrambled: ${file}`);
+            console.log(`✅ Successfully protected: ${file}`);
         }
     });
 }
 
-console.log("🛡️ Starting frontend code protection...");
+console.log("🛡️ Running safe frontend code protection...");
 obfuscateFolder(buildFolder);
-console.log("🎉 Frontend code is now fully obfuscated and protected against F12 inspection!");
+console.log("🎉 Build successfully protected and stable!");
