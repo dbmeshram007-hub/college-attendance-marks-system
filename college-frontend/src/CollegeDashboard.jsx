@@ -542,6 +542,20 @@ function FacultyBackfillAttendance({ subjects = [], allocations = [], activeFacu
     }
   }
 
+  // AUTOMATIC STATE SYNC FIX: Forces the internal state to match the visual dropdown
+  useEffect(() => {
+    if (subject) {
+      if (!isPractical) {
+        setBatch('All');
+      } else {
+        if (batch === 'All' || !allowedBatches.includes(batch)) {
+          const firstRealBatch = allowedBatches.find(b => b.toLowerCase() !== 'all') || 'A';
+          setBatch(firstRealBatch);
+        }
+      }
+    }
+  }, [subject, isPractical]);
+
   const fetchStudents = async () => {
     if (!subject || !date) return alert("Select a subject and past date.");
     setLoading(true);
