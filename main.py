@@ -52,15 +52,17 @@ def get_students(
 ):
     base_stmt = select(Student)
     
-    # SMART BATCH FILTERING: Extracts "A" out of "Batch_A" or "Batch A"
-    if batch and batch.strip() != "" and batch.strip().lower() != "all":
+    # 1. SMART EXACT BATCH MATCHING (Fixes "Batch A" matching "Batch B" or "All" due to the letter 'a')
+    if batch and batch.strip() != "" and batch.strip() != "All":
         batch_val = batch.strip()
-        clean_batch = batch_val.split("_")[-1] if "_" in batch_val else batch_val.replace("Batch ", "").replace("Batch", "").strip()
-        base_stmt = base_stmt.where(Student.batch_group.contains(clean_batch))
+        base_stmt = base_stmt.where(
+            (Student.batch_group == batch_val) | 
+            (Student.batch_group.ilike(f"Batch {batch_val}")) |
+            (Student.batch_group.ilike(f"% {batch_val}"))
+        )
 
     if not subject_id or subject_id.strip() == "":
-        return db.exec(base_stmt).all()
-        
+        return db.exec(base_stmt).all()        
     search_code = subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
@@ -97,18 +99,16 @@ def get_students(
         
     students = db.exec(stmt).all()
     
+    # 3. FIXED FALLBACK STATEMENT
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
-        
-        # FIXED: Make sure the fallback also respects the Program boundary
-        if is_m_pharm:
-            fallback_stmt = fallback_stmt.where(Student.program.ilike("%M%Pharm%"))
-        else:
-            fallback_stmt = fallback_stmt.where(Student.program.ilike("%B%Pharm%"))
-            
-        if batch and batch.strip() != "" and batch.strip().lower() != "all":
-            clean_batch = batch.strip().split("_")[-1] if "_" in batch.strip() else batch.strip().replace("Batch ", "").replace("Batch", "").strip()
-            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(clean_batch))
+        if batch and batch.strip() != "" and batch.strip() != "All":
+            batch_val = batch.strip()
+            fallback_stmt = fallback_stmt.where(
+                (Student.batch_group == batch_val) | 
+                (Student.batch_group.ilike(f"Batch {batch_val}")) |
+                (Student.batch_group.ilike(f"% {batch_val}"))
+            )
         students = db.exec(fallback_stmt).all()
         
     return students
