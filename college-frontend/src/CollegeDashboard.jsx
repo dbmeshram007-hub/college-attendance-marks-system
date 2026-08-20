@@ -26,35 +26,39 @@ export default function CollegeDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
-      try {
-        const endpoints = ['students', 'faculty', 'subjects', 'allocations'];
-        const results = await Promise.all(
-          endpoints.map(ep => 
-            fetch(`${API_BASE_URL}/${ep}`)
-              .then(res => {
-                if (!res.ok) throw new Error(`Failed to fetch ${ep}`);
-                return res.json();
-              })
-          )
-        );
-        setData({
-          students: results[0],
-          faculty: results[1],
-          subjects: results[2],
-          allocations: results[3]
-        });
-      } catch (err) {
-        setError("Backend Error: Could not connect to the cloud backend server.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  const [adminModal, setAdminModal] = useState({ isOpen: false, type: '', data: {} });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const loadDatabase = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const endpoints = ['students', 'faculty', 'subjects', 'allocations'];
+      const results = await Promise.all(
+        endpoints.map(ep => 
+          fetch(`${API_BASE_URL}/${ep}`)
+            .then(res => {
+              if (!res.ok) throw new Error(`Failed to fetch ${ep}`);
+              return res.json();
+            })
+        )
+      );
+      setData({
+        students: results[0],
+        faculty: results[1],
+        subjects: results[2],
+        allocations: results[3]
+      });
+    } catch (err) {
+      setError("Backend Error: Could not connect to the cloud backend server.");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    fetchData();
+  };
+
+  useEffect(() => {
+    loadDatabase();
 
     const savedUser = localStorage.getItem('college_app_user');
     if (savedUser) {
@@ -183,6 +187,49 @@ export default function CollegeDashboard() {
     }
   };
 
+  const handleAdminDelete = async (type, id) => {
+    if (!window.confirm(`Are you sure you want to delete this ${type}? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/${type}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert(`✅ Deleted successfully.`);
+        loadDatabase(); 
+      } else {
+        const err = await res.json();
+        alert(`❌ Error: ${err.detail || 'Could not delete.'}`);
+      }
+    } catch(e) { alert("Network error connecting to backend."); }
+  };
+
+  const handleAdminSave = async (e) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const payload = { ...adminModal.data };
+      if(payload.semester) payload.semester = parseInt(payload.semester, 10);
+      if(payload.lectures_per_week) payload.lectures_per_week = parseInt(payload.lectures_per_week, 10);
+
+      const res = await fetch(`${API_BASE_URL}/admin/${adminModal.type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        alert('✅ Saved successfully!');
+        setAdminModal({ isOpen: false, type: '', data: {} });
+        loadDatabase();
+      } else {
+        const err = await res.json();
+        alert(`❌ Error: ${err.detail || 'Could not save data. Please check required fields.'}`);
+      }
+    } catch (e) {
+      alert("Network error connecting to backend.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const activeFacultyId = currentUser?.role === 'faculty' ? currentUser.id : '';
 
   const filteredSubjects = data.subjects.filter(s => {
@@ -190,21 +237,28 @@ export default function CollegeDashboard() {
     return data.allocations.some(a => a.faculty_id === activeFacultyId && a.subject_id === s.subject_code);
   });
 
-  const renderTable = (headers, rows, keys) => (
+  const renderTable = (type, headers, rows, keys, primaryKeyField) => (
     <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
         <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
           <tr>
             {headers.map(h => <th key={h} style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>{h}</th>)}
+            {currentUser?.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={headers.length} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No data available</td></tr>
+            <tr><td colSpan={currentUser?.role === 'admin' ? headers.length + 1 : headers.length} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No data available</td></tr>
           ) : (
              rows.map((row, idx) => (
               <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 {keys.map(k => <td key={k} style={{ padding: '12px 16px', color: '#1e293b' }}>{row[k]}</td>)}
+                {currentUser?.role === 'admin' && (
+                  <td style={{ padding: '12px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => setAdminModal({ isOpen: true, type, data: row })} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
+                    <button onClick={() => handleAdminDelete(type, row[primaryKeyField])} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
+                  </td>
+                )}
               </tr>
             ))
           )}
@@ -234,12 +288,14 @@ export default function CollegeDashboard() {
                 <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{f.name}</td>
                 <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.email}</td>
                 {currentUser.role === 'admin' && (
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => setAdminModal({ isOpen: true, type: 'faculty', data: f })} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
+                    <button onClick={() => handleAdminDelete('faculty', f.faculty_id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
                     <button
                       onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
-                      style={{ padding: '6px 12px', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                      style={{ padding: '4px 10px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#d97706', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
-                      🔑 Reset PIN to 1234
+                      🔑 Reset PIN
                     </button>
                   </td>
                 )}
@@ -402,10 +458,47 @@ export default function CollegeDashboard() {
         <div style={{ animation: 'fadeIn 0.3s' }}>
           {activeTab === 'overview' && <OverviewDashboard currentUser={currentUser} />}
           
-          {activeTab === 'students' && renderTable(['ID', 'Name', 'Program', 'Semester', 'Batch'], data.students, ['student_id', 'full_name', 'program', 'semester', 'batch_group'])}
-          {activeTab === 'faculty' && renderFacultyTable()}
-          {activeTab === 'subjects' && renderTable(['Code', 'Name', 'Program', 'Semester'], data.subjects, ['subject_code', 'subject_name', 'program', 'semester'])}
-          {activeTab === 'allocations' && renderTable(['Faculty ID', 'Subject Code', 'Batch'], data.allocations, ['faculty_id', 'subject_id', 'batch_group'])}
+          {}
+          {activeTab === 'students' && (
+            <div>
+              {currentUser?.role === 'admin' && (
+                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+                  <button onClick={() => setAdminModal({ isOpen: true, type: 'students', data: { program: 'B. Pharm', specialization: 'General', semester: 1, batch_group: 'A' } })} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ Add New Student</button>
+                </div>
+              )}
+              {renderTable('students', ['ID', 'Name', 'Program', 'Semester', 'Batch'], data.students, ['student_id', 'full_name', 'program', 'semester', 'batch_group'], 'student_id')}
+            </div>
+          )}
+          {activeTab === 'faculty' && (
+             <div>
+               {currentUser?.role === 'admin' && (
+                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+                  <button onClick={() => setAdminModal({ isOpen: true, type: 'faculty', data: { password: '1234' } })} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ Add New Faculty</button>
+                </div>
+              )}
+              {renderFacultyTable()}
+             </div>
+          )}
+          {activeTab === 'subjects' && (
+             <div>
+               {currentUser?.role === 'admin' && (
+                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+                  <button onClick={() => setAdminModal({ isOpen: true, type: 'subjects', data: { program: 'B. Pharm', specialization: 'General', semester: 1, lectures_per_week: 4, type: 'Theory' } })} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ Add New Subject</button>
+                </div>
+              )}
+              {renderTable('subjects', ['Code', 'Name', 'Program', 'Semester'], data.subjects, ['subject_code', 'subject_name', 'program', 'semester'], 'subject_code')}
+             </div>
+          )}
+          {activeTab === 'allocations' && (
+             <div>
+               {currentUser?.role === 'admin' && (
+                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+                  <button onClick={() => setAdminModal({ isOpen: true, type: 'allocations', data: { allocation_type: 'Theory', batch_group: 'All' } })} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ Allocate Subject</button>
+                </div>
+              )}
+              {renderTable('allocations', ['Faculty ID', 'Subject Code', 'Batch'], data.allocations, ['faculty_id', 'subject_id', 'batch_group'], 'id')}
+             </div>
+          )}
           
           {activeTab === 'attendance' && (
             <AttendanceEntry 
@@ -437,6 +530,159 @@ export default function CollegeDashboard() {
               currentUser={currentUser} 
             />
           )}
+        </div>
+      )}
+
+      {}
+      {adminModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: '12px', width: '100%', maxWidth: '500px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#0f172a', textTransform: 'capitalize' }}>Manage {adminModal.type.replace('_', ' ')}</h3>
+            
+            <form onSubmit={handleAdminSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {adminModal.type === 'students' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Enrollment Number (ID) *</label>
+                    <input type="text" value={adminModal.data.student_id || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, student_id: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Full Name *</label>
+                    <input type="text" value={adminModal.data.full_name || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, full_name: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Program *</label>
+                      <select value={adminModal.data.program || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, program: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                        <option value="B. Pharm">B. Pharm</option>
+                        <option value="M. Pharm">M. Pharm</option>
+                      </select>
+                    </div>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Semester *</label>
+                      <input type="number" min="1" max="8" value={adminModal.data.semester || 1} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, semester: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Batch Group *</label>
+                      <input type="text" value={adminModal.data.batch_group || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, batch_group: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Specialization</label>
+                      <input type="text" value={adminModal.data.specialization || 'General'} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, specialization: e.target.value } })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {adminModal.type === 'faculty' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Faculty ID *</label>
+                    <input type="text" value={adminModal.data.faculty_id || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, faculty_id: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Full Name *</label>
+                    <input type="text" value={adminModal.data.name || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, name: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Email</label>
+                    <input type="email" value={adminModal.data.email || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, email: e.target.value } })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                </>
+              )}
+
+              {adminModal.type === 'subjects' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Base Subject Code (e.g. BP501T) *</label>
+                    <input type="text" value={adminModal.data.subject_code || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, subject_code: e.target.value.toUpperCase() } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Subject Name *</label>
+                    <input type="text" value={adminModal.data.subject_name || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, subject_name: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Program *</label>
+                      <select value={adminModal.data.program || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, program: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                        <option value="B. Pharm">B. Pharm</option>
+                        <option value="M. Pharm">M. Pharm</option>
+                      </select>
+                    </div>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Semester *</label>
+                      <input type="number" min="1" max="8" value={adminModal.data.semester || 1} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, semester: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Lectures / Week *</label>
+                      <input type="number" min="1" value={adminModal.data.lectures_per_week || 4} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, lectures_per_week: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Subject Type *</label>
+                      <select value={adminModal.data.type || 'Theory'} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, type: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                        <option value="Theory">Theory</option>
+                        <option value="Practical">Practical</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {adminModal.type === 'allocations' && (
+                <>
+                  <div style={{ fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '10px', borderRadius: '6px', marginBottom: '5px' }}>
+                    <strong>Smart Feature:</strong> Select the Base Subject Code. The system will automatically generate the <code>_THEORY</code> or <code>_PRACTICAL</code> variant based on the allocation type you pick below.
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Faculty Member *</label>
+                    <select value={adminModal.data.faculty_id || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, faculty_id: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                      <option value="">-- Select Faculty --</option>
+                      {data.faculty.map(f => <option key={f.faculty_id} value={f.faculty_id}>{f.name} ({f.faculty_id})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Base Subject Code *</label>
+                    <select value={adminModal.data.subject_id || ''} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, subject_id: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                      <option value="">-- Select Base Subject --</option>
+                      {data.subjects.filter(s => !s.subject_code.includes('_THEORY') && !s.subject_code.includes('_PRACTICAL')).map(s => (
+                        <option key={s.subject_code} value={s.subject_code}>{s.subject_code} - {s.subject_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Allocation Type *</label>
+                      <select value={adminModal.data.allocation_type || 'Theory'} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, allocation_type: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                        <option value="Theory">Theory</option>
+                        <option value="Practical">Practical</option>
+                      </select>
+                    </div>
+                    <div style={{flex: 1}}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>Batch Group *</label>
+                      <select value={adminModal.data.batch_group || 'All'} onChange={e => setAdminModal({ ...adminModal, data: { ...adminModal.data, batch_group: e.target.value } })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }}>
+                        <option value="All">All</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="E">E</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '1rem' }}>
+                <button type="button" onClick={() => setAdminModal({ isOpen: false, type: '', data: {} })} style={{ flex: 1, padding: '10px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={isSaving} style={{ flex: 1, padding: '10px', background: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 'bold', color: 'white', cursor: isSaving ? 'wait' : 'pointer' }}>{isSaving ? 'Saving...' : 'Save Record'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
       
