@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from typing import List, Optional
 import re
-from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import Student, Faculty, Subject, FacultyAllocation
 from app.routers import attendance, marks, reports
+from pydantic import BaseModel
 
 # 1. Create the App
 app = FastAPI(title="College Attendance & Marks API")
@@ -51,18 +51,13 @@ def get_students(
     db: Session = Depends(get_db)
 ):
     base_stmt = select(Student)
-    
-    # 1. SMART EXACT BATCH MATCHING (Fixes "Batch A" matching "Batch B" or "All" due to the letter 'a')
     if batch and batch.strip() != "" and batch.strip() != "All":
         batch_val = batch.strip()
-        base_stmt = base_stmt.where(
-            (Student.batch_group == batch_val) | 
-            (Student.batch_group.ilike(f"Batch {batch_val}")) |
-            (Student.batch_group.ilike(f"% {batch_val}"))
-        )
+        base_stmt = base_stmt.where(Student.batch_group.contains(batch_val))
 
     if not subject_id or subject_id.strip() == "":
-        return db.exec(base_stmt).all()        
+        return db.exec(base_stmt).all()
+        
     search_code = subject_id.strip().upper()
     subject = db.get(Subject, search_code)
     
@@ -71,17 +66,14 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        # FIXED: Check if it STARTS with M to avoid triggering on B.PHAR"M"
-        sub_prog = (subject.program or "").upper().strip()
-        if sub_prog.startswith("M") or "MASTER" in sub_prog:
+        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
             is_m_pharm = True
     else:
-        clean_code = re.sub(r'[^A-Z0-9_]', '', search_code)
-        match = re.search(r'[A-Z]+(\d)\d{2}', clean_code)
+        match = re.search(r'[A-Z]+(\d)\d{2}', search_code)
         if match:
             target_semester = int(match.group(1))
         else:
-            digits = re.findall(r'\d', clean_code)
+            digits = re.findall(r'\d', search_code)
             if digits:
                 target_semester = int(digits[0])
                 
@@ -99,16 +91,10 @@ def get_students(
         
     students = db.exec(stmt).all()
     
-    # 3. FIXED FALLBACK STATEMENT
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
-            batch_val = batch.strip()
-            fallback_stmt = fallback_stmt.where(
-                (Student.batch_group == batch_val) | 
-                (Student.batch_group.ilike(f"Batch {batch_val}")) |
-                (Student.batch_group.ilike(f"% {batch_val}"))
-            )
+            fallback_stmt = fallback_stmt.where(Batch_group.contains(batch.strip()))
         students = db.exec(fallback_stmt).all()
         
     return students
@@ -150,3 +136,94 @@ def admin_reset_password(payload: AdminResetPasswordPayload, db: Session = Depen
     db.add(faculty)
     db.commit()
     return {"message": f"Password for {faculty.name} has been reset to default (1234)."}
+
+# ==========================================
+# ADMIN MANAGEMENT CONSOLE ENDPOINTS
+# ==========================================
+
+@app.post("/api/admin/students")
+def save_student(student: Student, db: Session = Depends(get_db)):
+    db.merge(student)
+    db.commit()
+    return {"message": f"Student {student.full_name} saved successfully!"}
+
+@app.delete("/api/admin/students/{student_id}")
+def delete_student(student_id: str, db: Session = Depends(get_db)):
+    student = db.get(Student, student_id)
+    if not student: raise HTTPException(status_code=404, detail="Student not found")
+    db.delete(student)
+    db.commit()
+    return {"message": "Student deleted completely."}
+
+@app.post("/api/admin/faculty")
+def save_faculty(faculty: Faculty, db: Session = Depends(get_db)):
+    db.merge(faculty)
+    db.commit()
+    return {"message": f"Faculty {faculty.name} saved successfully!"}
+
+@app.delete("/api/admin/faculty/{faculty_id}")
+def delete_faculty(faculty_id: str, db: Session = Depends(get_db)):
+    faculty = db.get(Faculty, faculty_id)
+    if not faculty: raise HTTPException(status_code=404, detail="Faculty not found")
+    db.delete(faculty)
+    db.commit()
+    return {"message": "Faculty deleted completely."}
+
+@app.post("/api/admin/subjects")
+def save_subject(subject: Subject, db: Session = Depends(get_db)):
+    db.merge(subject)
+    db.commit()
+    return {"message": f"Subject {subject.subject_code} saved successfully!"}
+
+@app.delete("/api/admin/subjects/{subject_code}")
+def delete_subject(subject_code: str, db: Session = Depends(get_db)):
+    subject = db.get(Subject, subject_code)
+    if not subject: raise HTTPException(status_code=404, detail="Subject not found")
+    db.delete(subject)
+    db.commit()
+    return {"message": "Subject deleted completely."}
+
+@app.post("/api/admin/allocations")
+def save_allocation(alloc: FacultyAllocation, db: Session = Depends(get_db)):
+    base_sub_id = alloc.subject_id.upper().strip()
+    alloc_type = alloc.allocation_type or 'Theory'
+    
+    # Smart Suffix Logic
+    suffix = "_PRACTICAL" if "PRACTICAL" in alloc_type.upper() else "_THEORY"
+    
+    if base_sub_id.endswith("_THEORY") or base_sub_id.endswith("_PRACTICAL"):
+        suffixed_sub_id = base_sub_id
+        base_sub_id = base_sub_id.replace("_THEORY", "").replace("_PRACTICAL", "")
+    else:
+        suffixed_sub_id = f"{base_sub_id}{suffix}"
+        
+    existing_sub = db.get(Subject, suffixed_sub_id)
+    if not existing_sub:
+        base_sub = db.get(Subject, base_sub_id)
+        if base_sub:
+            new_sub = Subject(
+                subject_code=suffixed_sub_id,
+                subject_name=f"{base_sub.subject_name} ({alloc_type.capitalize()})",
+                program=base_sub.program,
+                specialization=base_sub.specialization,
+                semester=base_sub.semester,
+                lectures_per_week=base_sub.lectures_per_week,
+                type=alloc_type.capitalize()
+            )
+            db.add(new_sub)
+            db.commit()
+        else:
+            raise HTTPException(status_code=404, detail=f"Base subject '{base_sub_id}' missing. Create it in Subjects first.")
+            
+    alloc.subject_id = suffixed_sub_id
+    db.merge(alloc)
+    db.commit()
+    return {"message": f"Allocation for {suffixed_sub_id} saved successfully!"}
+
+@app.delete("/api/admin/allocations/{alloc_id}")
+def delete_allocation(alloc_id: int, db: Session = Depends(get_db)):
+    alloc = db.get(FacultyAllocation, alloc_id)
+    if not alloc: raise HTTPException(status_code=404, detail="Allocation not found")
+    db.delete(alloc)
+    db.commit()
+    return {"message": "Allocation removed."}
