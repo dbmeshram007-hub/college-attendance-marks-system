@@ -54,7 +54,7 @@ def get_students(
     db: Session = Depends(get_db)
 ):
     base_stmt = select(Student)
-    if batch and batch.strip() != "" and batch.strip() != "All":
+    if batch and batch and batch.strip() != "" and batch.strip().lower() != "all":
         batch_val = batch.strip()
         base_stmt = base_stmt.where(Student.batch_group.contains(batch_val))
 
@@ -69,7 +69,9 @@ def get_students(
     
     if subject:
         target_semester = subject.semester
-        if subject.program and ("M" in subject.program.upper() or "M." in subject.program.upper() or "MASTER" in subject.program.upper()):
+        sub_prog = (subject.program or "").upper().strip()
+        # FIX: Check if it STARTS with M. (Because "B. PHARM" contains the letter "M"!)
+        if sub_prog.startswith("M") or "MASTER" in sub_prog:
             is_m_pharm = True
     else:
         match = re.search(r'[A-Z]+(\d)\d{2}', search_code)
@@ -94,12 +96,6 @@ def get_students(
         
     students = db.exec(stmt).all()
     
-    if not students and target_semester:
-        fallback_stmt = select(Student).where(Student.semester == target_semester)
-        if batch and batch.strip() != "" and batch.strip() != "All":
-            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(batch.strip()))
-        students = db.exec(fallback_stmt).all()
-        
     return students
 
 @app.get("/api/faculty", response_model=List[Faculty])
