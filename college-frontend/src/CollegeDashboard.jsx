@@ -899,7 +899,8 @@ function FacultyBackfillAttendance({ subjects = [], allocations = [], activeFacu
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
     if (myAllocs.length > 0 && !myAllocs.some(a => a.batch_group.toLowerCase() === 'all')) {
-      allowedBatches = myAllocs.map(a => a.batch_group);
+      // CLEANUP FIX: Removes the word "Batch" and underscores so "Batch_A" becomes just "A"
+      allowedBatches = [...new Set(myAllocs.map(a => a.batch_group.replace(/batch/i, '').replace(/_/g, '').trim() || a.batch_group))];
     }
   }
 
@@ -1222,7 +1223,8 @@ function AttendanceEntry({ subjects = [], activeFaculty, allocations = [] }) {
   if (activeFaculty && subject) {
     const myAllocs = allocations.filter(a => a.faculty_id === activeFaculty && a.subject_id === subject);
     if (myAllocs.length > 0 && !myAllocs.some(a => a.batch_group.toLowerCase() === 'all')) {
-      allowedBatches = myAllocs.map(a => a.batch_group);
+      // CLEANUP FIX: Removes the word "Batch" and underscores so "Batch_A" becomes just "A"
+      allowedBatches = [...new Set(myAllocs.map(a => a.batch_group.replace(/batch/i, '').replace(/_/g, '').trim() || a.batch_group))];
     }
   }
 
