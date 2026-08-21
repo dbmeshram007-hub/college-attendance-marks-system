@@ -39,6 +39,9 @@ class ChangePasswordPayload(BaseModel):
 class AdminResetPasswordPayload(BaseModel):
     faculty_id: str
 
+class PromotePayload(BaseModel):
+    student_ids: List[str]
+
 # 5. Core Endpoints
 @app.get("/")
 def read_root():
@@ -94,7 +97,7 @@ def get_students(
     if not students and target_semester:
         fallback_stmt = select(Student).where(Student.semester == target_semester)
         if batch and batch.strip() != "" and batch.strip() != "All":
-            fallback_stmt = fallback_stmt.where(Batch_group.contains(batch.strip()))
+            fallback_stmt = fallback_stmt.where(Student.batch_group.contains(batch.strip()))
         students = db.exec(fallback_stmt).all()
         
     return students
@@ -140,6 +143,17 @@ def admin_reset_password(payload: AdminResetPasswordPayload, db: Session = Depen
 # ==========================================
 # ADMIN MANAGEMENT CONSOLE ENDPOINTS
 # ==========================================
+
+@app.post("/api/admin/promote")
+def promote_students(payload: PromotePayload, db: Session = Depends(get_db)):
+    students = db.exec(select(Student).where(Student.student_id.in_(payload.student_ids))).all()
+    count = 0
+    for student in students:
+        student.semester += 1
+        db.add(student)
+        count += 1
+    db.commit()
+    return {"message": f"Successfully promoted {count} students to the next semester!"}
 
 @app.post("/api/admin/students")
 def save_student(student: Student, db: Session = Depends(get_db)):

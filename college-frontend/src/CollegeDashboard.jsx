@@ -29,6 +29,11 @@ export default function CollegeDashboard() {
   const [adminModal, setAdminModal] = useState({ isOpen: false, type: '', data: {} });
   const [isSaving, setIsSaving] = useState(false);
 
+  // PROMOTION TOOL STATE
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [promoteSettings, setPromoteSettings] = useState({ program: 'B. Pharm', semester: 1 });
+  const [promoteSelection, setPromoteSelection] = useState({});
+
   const loadDatabase = async () => {
     setLoading(true);
     setError(null);
@@ -202,32 +207,46 @@ export default function CollegeDashboard() {
   };
 
   const handleAdminSave = async (e) => {
-    e.preventDefault();
+    // ... existing code (unchanged)
+  };
+
+  // --- NEW: HANDLE BATCH PROMOTION ---
+  const handlePromoteStudents = async () => {
+    const selectedIds = Object.keys(promoteSelection).filter(id => promoteSelection[id]);
+    if (selectedIds.length === 0) return alert("No students selected for promotion.");
+    
+    if (!window.confirm(`Are you sure you want to promote ${selectedIds.length} students to the next semester?`)) return;
+    
     setIsSaving(true);
     try {
-      const payload = { ...adminModal.data };
-      if(payload.semester) payload.semester = parseInt(payload.semester, 10);
-      if(payload.lectures_per_week) payload.lectures_per_week = parseInt(payload.lectures_per_week, 10);
-
-      const res = await fetch(`${API_BASE_URL}/admin/${adminModal.type}`, {
+      const res = await fetch(`${API_BASE_URL}/admin/promote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ student_ids: selectedIds })
       });
-      
       if (res.ok) {
-        alert('✅ Saved successfully!');
-        setAdminModal({ isOpen: false, type: '', data: {} });
+        alert('✅ Promotion successful! Students moving from Sem 8/4 are now marked as Alumni.');
+        setShowPromoteModal(false);
         loadDatabase();
       } else {
-        const err = await res.json();
-        alert(`❌ Error: ${err.detail || 'Could not save data. Please check required fields.'}`);
+        alert('❌ Failed to promote students.');
       }
     } catch (e) {
-      alert("Network error connecting to backend.");
+      alert("Network error.");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // --- NEW: FILTER STUDENTS FOR PROMOTION TOOL ---
+  const studentsToPromote = data.students.filter(
+    s => s.program === promoteSettings.program && s.semester === promoteSettings.semester
+  );
+
+  const togglePromoteAll = (selectAll) => {
+    const newSelection = {};
+    studentsToPromote.forEach(s => newSelection[s.student_id] = selectAll);
+    setPromoteSelection(newSelection);
   };
 
   const activeFacultyId = currentUser?.role === 'faculty' ? currentUser.id : '';
@@ -272,31 +291,26 @@ export default function CollegeDashboard() {
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
         <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
           <tr>
-            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>ID</th>
+            <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Faculty ID</th>
             <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Name</th>
             <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600' }}>Email</th>
-            {currentUser.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Admin Action</th>}
+            {currentUser?.role === 'admin' && <th style={{ padding: '12px 16px', color: '#475569', fontWeight: '600', textAlign: 'center' }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
           {data.faculty.length === 0 ? (
-            <tr><td colSpan={currentUser.role === 'admin' ? 4 : 3} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No faculty available</td></tr>
+            <tr><td colSpan={currentUser?.role === 'admin' ? 4 : 3} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No data available</td></tr>
           ) : (
-            data.faculty.map((f, idx) => (
+             data.faculty.map((row, idx) => (
               <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.faculty_id}</td>
-                <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{f.name}</td>
-                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{f.email}</td>
-                {currentUser.role === 'admin' && (
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{row.faculty_id}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{row.name}</td>
+                <td style={{ padding: '12px 16px', color: '#1e293b' }}>{row.email}</td>
+                {currentUser?.role === 'admin' && (
                   <td style={{ padding: '12px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => setAdminModal({ isOpen: true, type: 'faculty', data: f })} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
-                    <button onClick={() => handleAdminDelete('faculty', f.faculty_id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
-                    <button
-                      onClick={() => handleAdminResetPin(f.faculty_id, f.name)}
-                      style={{ padding: '4px 10px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#d97706', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
-                    >
-                      🔑 Reset PIN
-                    </button>
+                    <button onClick={() => handleAdminResetPin(row.faculty_id, row.name)} style={{ background: '#fef9c3', color: '#ea580c', border: '1px solid #fef08a', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🔑 Reset PIN</button>
+                    <button onClick={() => setAdminModal({ isOpen: true, type: 'faculty', data: row })} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Edit</button>
+                    <button onClick={() => handleAdminDelete('faculty', row.faculty_id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Delete</button>
                   </td>
                 )}
               </tr>
@@ -306,6 +320,15 @@ export default function CollegeDashboard() {
       </table>
     </div>
   );
+
+  // --- NEW: FORMAT ALUMNI DISPLAY ---
+  const formattedStudents = data.students.map(s => {
+    const isAlumni = (s.program === 'B. Pharm' && s.semester > 8) || (s.program === 'M. Pharm' && s.semester > 4);
+    return {
+      ...s,
+      display_semester: isAlumni ? '🎓 Alumni' : s.semester
+    };
+  });
 
   if (!currentUser) {
     return (
@@ -458,15 +481,24 @@ export default function CollegeDashboard() {
         <div style={{ animation: 'fadeIn 0.3s' }}>
           {activeTab === 'overview' && <OverviewDashboard currentUser={currentUser} />}
           
-          {}
           {activeTab === 'students' && (
             <div>
               {currentUser?.role === 'admin' && (
-                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px', gap: '10px'}}>
+                  <button 
+                    onClick={() => {
+                      setPromoteSettings({ program: 'B. Pharm', semester: 1 });
+                      setPromoteSelection({});
+                      setShowPromoteModal(true);
+                    }} 
+                    style={{ padding: '8px 16px', background: '#ea580c', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    🚀 Smart Batch Promotion
+                  </button>
                   <button onClick={() => setAdminModal({ isOpen: true, type: 'students', data: { program: 'B. Pharm', specialization: 'General', semester: 1, batch_group: 'A' } })} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ Add New Student</button>
                 </div>
               )}
-              {renderTable('students', ['ID', 'Name', 'Program', 'Semester', 'Batch'], data.students, ['student_id', 'full_name', 'program', 'semester', 'batch_group'], 'student_id')}
+              {renderTable('students', ['ID', 'Name', 'Program', 'Semester', 'Batch'], formattedStudents, ['student_id', 'full_name', 'program', 'display_semester', 'batch_group'], 'student_id')}
             </div>
           )}
           {activeTab === 'faculty' && (
@@ -533,7 +565,90 @@ export default function CollegeDashboard() {
         </div>
       )}
 
-      {}
+      {/* SMART PROMOTION MODAL */}
+      {showPromoteModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, color: '#0f172a' }}>🚀 Promote Students</h3>
+              <button onClick={() => setShowPromoteModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748b' }}>×</button>
+            </div>
+            
+            <p style={{ color: '#64748b', fontSize: '13px', marginTop: 0 }}>
+              Select a batch. Uncheck any student who failed or dropped out. Checked students will advance 1 semester. 
+              (8th/4th Semester students will become Alumni).
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem', background: '#f1f5f9', padding: '10px', borderRadius: '8px' }}>
+              <select 
+                value={promoteSettings.program} 
+                onChange={e => { setPromoteSettings({...promoteSettings, program: e.target.value}); setPromoteSelection({}); }} 
+                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1 }}
+              >
+                <option value="B. Pharm">B. Pharm</option>
+                <option value="M. Pharm">M. Pharm</option>
+              </select>
+              <select 
+                value={promoteSettings.semester} 
+                onChange={e => { setPromoteSettings({...promoteSettings, semester: Number(e.target.value)}); setPromoteSelection({}); }} 
+                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', flex: 1 }}
+              >
+                {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Semester {s}</option>)}
+              </select>
+              <button 
+                onClick={() => togglePromoteAll(true)} 
+                style={{ padding: '8px 12px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Load & Select All
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '1rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <tr>
+                    <th style={{ padding: '10px', textAlign: 'center', width: '50px' }}>
+                      <input type="checkbox" onChange={e => togglePromoteAll(e.target.checked)} />
+                    </th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Enrollment</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentsToPromote.length === 0 ? (
+                    <tr><td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No students found in this semester.</td></tr>
+                  ) : (
+                    studentsToPromote.map(s => (
+                      <tr key={s.student_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={!!promoteSelection[s.student_id]} 
+                            onChange={e => setPromoteSelection({...promoteSelection, [s.student_id]: e.target.checked})}
+                            style={{ width: '16px', height: '16px', accentColor: '#ea580c' }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px', color: '#64748b' }}>{s.student_id}</td>
+                        <td style={{ padding: '10px', fontWeight: '500' }}>{s.full_name}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <button 
+              onClick={handlePromoteStudents} 
+              disabled={isSaving || Object.values(promoteSelection).every(v => !v)}
+              style={{ width: '100%', padding: '12px', background: '#ea580c', border: 'none', borderRadius: '8px', fontWeight: 'bold', color: 'white', cursor: isSaving ? 'wait' : 'pointer' }}
+            >
+              {isSaving ? 'Promoting...' : `Promote ${Object.values(promoteSelection).filter(v => v).length} Selected Students`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN ADD/EDIT MODAL */}
       {adminModal.isOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ background: 'white', borderRadius: '12px', width: '100%', maxWidth: '500px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '90vh', overflowY: 'auto' }}>

@@ -2,7 +2,7 @@
 Edit your Excel File: Open College_System_Seed_Data.xlsx and go to the Faculty_Allocation sheet.
 Make Changes: Add, delete, or change the faculty_id for the subjects you want to reallocate.
 Save: Save and close the Excel file.
-Run the Sync: Open your VS Code terminal and run:python sync_excel.py
+Run the Sync: Open your VS Code terminal and run: python sync_excel.py
 
 2. Adding New Students
 Edit your Excel File: Open College_System_Seed_Data.xlsx and go to the Students sheet.
