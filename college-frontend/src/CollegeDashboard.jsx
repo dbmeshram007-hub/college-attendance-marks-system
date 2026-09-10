@@ -207,7 +207,30 @@ export default function CollegeDashboard() {
   };
 
   const handleAdminSave = async (e) => {
-    // ... existing code (unchanged)
+    e.preventDefault();
+    setIsSaving(true);
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/${adminModal.type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(adminModal.data)
+      });
+      
+      const resData = await res.json();
+      
+      if (res.ok) {
+        alert(`✅ Success: ${resData.message}`);
+        setAdminModal({ isOpen: false, type: '', data: {} });
+        loadDatabase(); // This instantly refreshes the table to show the new student!
+      } else {
+        alert(`❌ Error: ${resData.detail || 'Failed to save record.'}`);
+      }
+    } catch (err) {
+      alert("Network error connecting to the cloud server.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // --- NEW: HANDLE BATCH PROMOTION ---
