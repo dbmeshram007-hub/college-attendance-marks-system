@@ -995,7 +995,7 @@ function FacultyBackfillAttendance({ subjects = [], allocations = [], activeFacu
         <h2 style={{ margin: 0, color: '#1e40af' }}>Backfill Past Lecture Attendance</h2>
       </div>
       <p style={{ color: '#64748b', fontSize: '13px', marginTop: 0, marginBottom: '20px' }}>
-        Use this tab to log lectures conducted prior to the app's launch. <strong>Deadline: September 18, 2026.</strong>
+        Use this tab to log lectures conducted prior to the app's launch. <strong>Deadline: September 20, 2026.</strong>
       </p>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', alignItems: 'center' }}>
