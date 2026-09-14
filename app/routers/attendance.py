@@ -10,7 +10,7 @@ import re
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
 # STIPULATED DEADLINE: Backfilling past attendance is allowed only until this date
-BACKFILL_DEADLINE = date(2026, 9, 1)
+BACKFILL_DEADLINE = date(2026, 9, 20)
 
 class StudentRecord(BaseModel):
     student_id: str
