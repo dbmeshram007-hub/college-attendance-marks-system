@@ -5,7 +5,7 @@ from typing import List, Optional
 import re
 
 from app.database import get_db
-from app.models import Student, Faculty, Subject, FacultyAllocation
+from app.models import Student, Faculty, Subject, FacultyAllocation, Attendance, ExamMark
 from app.routers import attendance, marks, reports
 from pydantic import BaseModel
 
@@ -159,11 +159,28 @@ def save_student(student: Student, db: Session = Depends(get_db)):
 
 @app.delete("/api/admin/students/{student_id}")
 def delete_student(student_id: str, db: Session = Depends(get_db)):
-    student = db.get(Student, student_id)
-    if not student: raise HTTPException(status_code=404, detail="Student not found")
-    db.delete(student)
-    db.commit()
-    return {"message": "Student deleted completely."}
+    try:
+        student = db.get(Student, student_id)
+        if not student: 
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        # 1. Safely remove associated attendance records first
+        att_records = db.exec(select(Attendance).where(Attendance.student_id == student_id)).all()
+        for r in att_records:
+            db.delete(r)
+            
+        # 2. Safely remove associated exam marks
+        exam_marks = db.exec(select(ExamMark).where(ExamMark.student_id == student_id)).all()
+        for m in exam_marks:
+            db.delete(m)
+            
+        # 3. Now it is safe to delete the student!
+        db.delete(student)
+        db.commit()
+        return {"message": "Student and all their records deleted completely."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Database Crash Prevented! Hidden Error: {str(e)}")
 
 @app.post("/api/admin/faculty")
 def save_faculty(faculty: Faculty, db: Session = Depends(get_db)):
