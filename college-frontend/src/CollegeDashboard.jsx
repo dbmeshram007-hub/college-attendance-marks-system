@@ -203,7 +203,7 @@ export default function CollegeDashboard() {
         const err = await res.json();
         alert(`❌ Error: ${err.detail || 'Could not delete.'}`);
       }
-    } catch(e) { alert("Network error connecting to backend."); }
+    } catch(e) { alert(`Failed: ${e.message} (Please wait 60 seconds for server to wake up)`); }
   };
 
   const handleAdminSave = async (e) => {
