@@ -1,3 +1,11 @@
+For extending backfillchnage date at line 998 in collegedashboard.jsx, the run
+git add college-frontend/src/CollegeDashboard.jsx
+git commit -m "Extended faculty backfill deadline to Oct 31"
+git push
+Also change in attendance.py and run
+git add app/routers/attendance.py
+git commit -m "Updated backend backfill security rule to September 20"
+git push
 1. For changing subject allocation:
 Edit your Excel File: Open College_System_Seed_Data.xlsx and go to the Faculty_Allocation sheet.
 Make Changes: Add, delete, or change the faculty_id for the subjects you want to reallocate.
