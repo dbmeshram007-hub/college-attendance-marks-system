@@ -59,6 +59,8 @@ def get_students(
         base_stmt = base_stmt.where(Student.batch_group.contains(batch_val))
 
     if not subject_id or subject_id.strip() == "":
+        # FIX 1: Sort the general student list by Enrollment ID
+        base_stmt = base_stmt.order_by(Student.student_id)
         return db.exec(base_stmt).all()
         
     search_code = subject_id.strip().upper()
@@ -93,6 +95,9 @@ def get_students(
         stmt = stmt.where(Student.program.ilike("%M%Pharm%"))
     else:
         stmt = stmt.where(Student.program.ilike("%B%Pharm%"))
+        
+    # FIX 2: Sort the Attendance/Backfill registers by Enrollment ID
+    stmt = stmt.order_by(Student.student_id)
         
     students = db.exec(stmt).all()
     
