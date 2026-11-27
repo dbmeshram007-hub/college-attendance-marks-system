@@ -1,3 +1,8 @@
+(For extending date after changing use command:
+git add .
+git commit -m "Extended backfill deadline to Oct 14 for both frontend and backend"
+git push)
+
 For extending backfillchnage date at line 998 in collegedashboard.jsx, the run
 git add college-frontend/src/CollegeDashboard.jsx
 git commit -m "Extended faculty backfill deadline to Oct 14"
